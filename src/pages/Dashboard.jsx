@@ -189,7 +189,7 @@ function AlertLevelTable({ currentAlert }) {
         const info = ALERT_LEVELS[key];
         const isCurrent = currentAlert === key;
         return (
-          <div key={key} style={{
+          <div key={key} className="row-grid" style={{
             display: 'grid', gridTemplateColumns: '10px 70px 1fr',
             alignItems: 'center', gap: 10,
             padding: '10px 12px',
@@ -308,7 +308,7 @@ function PredictionInputTable({ prediction }) {
       <SectionLabel>📊 Prediction Input Summary</SectionLabel>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {rows.map(({ label, value, icon, note }, i) => (
-          <div key={label} style={{
+          <div key={label} className="row-grid" style={{
             display: 'grid', gridTemplateColumns: '24px 1fr auto',
             alignItems: 'center', gap: 10, padding: '9px 10px',
             background: i % 2 === 0 ? 'var(--blue-mid)' : 'transparent',
@@ -778,7 +778,7 @@ function DriverModal({ day, onClose }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {drivers.map(({ label, value, icon }, i) => (
-            <div key={label} style={{
+            <div key={label} className="row-grid" style={{
               display: 'grid', gridTemplateColumns: '24px 1fr auto',
               alignItems: 'center', gap: 10, padding: '9px 10px',
               background: i % 2 === 0 ? 'var(--blue-mid)' : 'transparent',

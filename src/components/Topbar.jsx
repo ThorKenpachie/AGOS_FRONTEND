@@ -72,7 +72,7 @@ export default function Topbar({ title, onMenuClick, alertLevel }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      <div className="topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
 
         {/* Algorithm switcher — GRU / LSTM / CNN. All three are trained on
             the same scaler/feature contract, so switching here just tells
@@ -147,7 +147,13 @@ export default function Topbar({ title, onMenuClick, alertLevel }) {
       </div>
 
       <style>{`
-        @media (max-width: 768px) { .mobile-menu-btn { display: block !important; } }
+        @media (max-width: 768px) {
+          .mobile-menu-btn { display: block !important; }
+          .topbar-actions { gap: 8px !important; flex: 1 1 100%; justify-content: flex-start !important; }
+        }
+        @media (max-width: 480px) {
+          .topbar-actions button { padding: 6px 9px !important; font-size: 0.68rem !important; }
+        }
       `}</style>
     </div>
   );

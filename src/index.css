@@ -277,6 +277,30 @@ body {
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .page-body { padding: 16px; }
   .hide-mobile { display: none !important; }
+
+  /* Most page content uses ad-hoc inline `display:grid; gridTemplateColumns`
+     layouts (multi-column report forms, stat rows, chart+sidebar splits)
+     rather than the .grid-2/3/4 helpers above, so they don't pick up the
+     rule right above this comment. Force every such grid down to a single
+     column on phones/small tablets so nothing gets clipped or forced into
+     tiny squeezed columns. Compact list-item rows (icon + label + value,
+     badge + chevron, etc.) that read fine — and look better — staying on
+     one row are opted out via the `row-grid` class rather than left to
+     stack awkwardly. `!important` is required here because inline styles
+     otherwise always win over a stylesheet rule. */
+  [style*="grid-template-columns"]:not(.row-grid) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .topbar { padding: 10px 14px; flex-wrap: wrap; gap: 8px; row-gap: 8px; }
+  .page-body { overflow-x: hidden; }
+}
+
+@media (max-width: 480px) {
+  html { font-size: 15px; }
+  .page-body { padding: 12px; }
+  .card { padding: 14px; }
+  .topbar h1 { font-size: 0.95rem !important; }
 }
 
 .form-control::placeholder {

@@ -179,7 +179,7 @@ function StatSummary({ reports }) {
   ];
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10, marginBottom: 18 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 18 }}>
       {items.map(({ label, value, color, icon }) => (
         <div key={label} className="card" style={{
           borderTop: `3px solid ${color}`,
@@ -264,7 +264,7 @@ function ReportCard({ report, onStatusChange, canEdit }) {
           {/* Environmental metrics */}
           <div style={{ marginTop: 14, marginBottom: 6 }}>
             <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>🌊 Environmental Data</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
               <MetricCell label="Water Level"           value={report.water_level        ? `${report.water_level}m`             : '—'} />
               <MetricCell label="Rainfall at Event"     value={report.rainfall_mm_at_event ? `${report.rainfall_mm_at_event} mm` : '—'} />
               <MetricCell label="Duration"              value={report.duration_hours      ? `${report.duration_hours} hrs`       : '—'} />
@@ -275,7 +275,7 @@ function ReportCard({ report, onStatusChange, canEdit }) {
           {/* Impact metrics */}
           <div style={{ marginBottom: 6 }}>
             <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>🏠 Impact Data</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
               <MetricCell label="Households Affected" value={report.affected_hh         ? report.affected_hh.toLocaleString()     : '—'} />
               <MetricCell label="Displaced Persons"   value={report.displaced_persons   ? report.displaced_persons.toLocaleString() : '—'} />
               <MetricCell label="Casualties"          value={report.casualties          ?? '0'} />
@@ -681,7 +681,7 @@ function ModelAccuracyPanel({ reports }) {
 
       {/* Per-record comparison table */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+        <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse', fontSize: '0.78rem' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--blue-border)' }}>
               {['Date', 'Location', 'AGOS Predicted', 'Actual Severity', 'Result'].map(h => (

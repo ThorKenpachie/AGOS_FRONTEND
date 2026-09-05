@@ -179,7 +179,7 @@ function ShapPanel({ activeModel, explanation, loading, error, onRefresh }) {
 
       {isReal && (
         <div style={{ marginTop: 18, overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+          <table style={{ width: '100%', minWidth: 520, borderCollapse: 'collapse', fontSize: '0.78rem' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--blue-border)' }}>
                 {['Feature', 'Current Value', 'SHAP Contribution', 'Direction'].map(h => (
