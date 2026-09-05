@@ -240,6 +240,19 @@ body {
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 
+/* Every grid item below defaults to `min-width: auto`, i.e. it won't shrink
+   past its content's min-content size — so a wide child (typically a
+   horizontally-scrolling row like .weather-hourly-row) silently forces its
+   whole grid cell, and the page, wider than the viewport instead of
+   scrolling inside its own `overflow-x: auto`. Resetting the min-width to 0
+   on every grid item lets the track actually respect the column size so
+   the intended internal scroll containers do their job. */
+.grid-2 > *, .grid-3 > *, .grid-4 > *,
+.weather-hero-grid > *,
+[style*="grid-template-columns"] > * {
+  min-width: 0;
+}
+
 /* Weather forecast widget */
 .weather-day-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
 .weather-hero-grid { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: stretch; }
