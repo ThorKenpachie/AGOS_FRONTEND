@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { supabase } from '../lib/supabaseClient';
 import { SectionLabel } from '../components/ui';
+import { useModelSelection } from '../hooks/useModelSelection';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -206,8 +207,9 @@ export default function RainfallPage() {
   const [hourlyLogs, setHourlyLogs]   = useState([]);
   const [lastFetched, setLastFetched] = useState(null);
 
-  const { prediction } = useOutletContext();
-  const liveRainfall   = prediction?.live_metrics?.rainfall_mm ?? null;
+  const { prediction }  = useOutletContext();
+  const { activeModel } = useModelSelection();
+  const liveRainfall    = prediction?.live_metrics?.rainfall_mm ?? null;
 
   const fetchRainfall = useCallback(async () => {
     const since        = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -597,7 +599,7 @@ export default function RainfallPage() {
           </div>
           <div style={{ marginTop: 2 }}>
             {prediction
-              ? '🔵 Live data source: Open-Meteo Weather API via LSTM Backend · Poll interval: 30s'
+              ? `🔵 Live data source: Open-Meteo Weather API via ${activeModel.fullLabel} · Poll interval: 30s`
               : '⚪ Fallback source: PAGASA Weather Station · Naga City'}
           </div>
         </div>
