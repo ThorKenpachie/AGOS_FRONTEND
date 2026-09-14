@@ -1,6 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const MODEL_URL = 'https://flood-api-553657561163.asia-southeast1.run.app/api/predict-flood'
+// Points at the current AI_Model deployment on Render. This used to point
+// at a defunct Cloud Run URL (flood-api-...run.app) from an earlier
+// iteration of the backend -- verified the response shape below
+// (status/alert_level/probability/live_metrics.*) still matches exactly
+// what this function expects, no other changes needed.
+const MODEL_URL = 'https://agos-ai-model.onrender.com/api/predict-flood'
 
 const ALERT_MESSAGES = {
   ADVISORY: 'AGOS Alert: ADVISORY level reached...',

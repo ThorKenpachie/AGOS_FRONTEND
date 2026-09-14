@@ -1,18 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MapContainer, TileLayer, Polygon as LeafletPolygon, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import EvacuationMap3D from '../components/EvacuationMap3D';
 import { SectionLabel } from '../components/ui';
+import { supabase } from '../lib/supabaseClient';
+import { logger } from '../lib/logger';
 
-// ─── Evacuation Centers ─────────────────────────────────────────────────────
-const EVACUATION_CENTERS = [
+// Color is derived from `type` rather than stored in the DB -- keeps the
+// legend's two categories (Primary / School) driving the marker color even
+// as more centers with new `type` values get added later.
+function colorForType(type) {
+  return /primary/i.test(type ?? '') ? '#ef4444' : '#3b82f6';
+}
+
+// Used only if the live evacuation_centers table is empty or unreachable --
+// see fetchCenters() below. Keeps the map from going blank on a fetch
+// hiccup, same defensive pattern as the rest of the app (e.g. Dashboard's
+// offline banner still shows fallback data instead of a blank page).
+const FALLBACK_EVACUATION_CENTERS = [
   {
     id: 'jesse-robredo',
     name: 'Jesse M. Robredo Coliseum',
     type: 'Primary Evacuation Center',
     position: { lat: 13.620122, lng: 123.188095 },
-    address:'Ninoy and Cory Ave, Naga City, Camarines Sur',
+    address: 'Ninoy and Cory Ave, Naga City, Camarines Sur',
     color: '#ef4444',
   },
   {
@@ -20,7 +32,7 @@ const EVACUATION_CENTERS = [
     name: 'Triangulo Elementary School',
     type: 'School Evacuation Center',
     position: { lat: 13.6165193, lng: 123.1878926 },
-    address:'CBD II, Diversion Road, Barangay Triangulo, Naga City, 4400 Camarines Sur',
+    address: 'CBD II, Diversion Road, Barangay Triangulo, Naga City, 4400 Camarines Sur',
     color: '#3b82f6',
   },
   {
@@ -28,7 +40,7 @@ const EVACUATION_CENTERS = [
     name: 'Jose Rizal Elementary School',
     type: 'School Evacuation Center',
     position: { lat: 13.6194395, lng: 123.1933071 },
-    address: ' J59W+Q9C, Ilang-ilang St, Barangay Triangulo, Naga City, 4400 Camarines Sur',
+    address: 'J59W+Q9C, Ilang-ilang St, Barangay Triangulo, Naga City, 4400 Camarines Sur',
     color: '#3b82f6',
   },
 ];
@@ -150,14 +162,28 @@ function EvacuationCenterCard({ center }) {
           <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
             {center.name}
           </div>
-          <div style={{
-            display: 'inline-flex', marginTop: 4,
-            fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em',
-            background: `${center.color}18`, color: center.color,
-            border: `1px solid ${center.color}40`,
-            borderRadius: 4, padding: '2px 7px',
-          }}>
-            {center.type.toUpperCase()}
+          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'inline-flex',
+              fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em',
+              background: `${center.color}18`, color: center.color,
+              border: `1px solid ${center.color}40`,
+              borderRadius: 4, padding: '2px 7px',
+            }}>
+              {center.type.toUpperCase()}
+            </div>
+            {center.is_open != null && (
+              <div style={{
+                display: 'inline-flex',
+                fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em',
+                background: center.is_open ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                color: center.is_open ? '#22c55e' : '#ef4444',
+                border: `1px solid ${center.is_open ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`,
+                borderRadius: 4, padding: '2px 7px',
+              }}>
+                {center.is_open ? 'OPEN' : 'CLOSED'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -183,6 +209,16 @@ function EvacuationCenterCard({ center }) {
             {center.address}
           </span>
         </div>
+        {center.capacity != null && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Occupancy
+            </span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+              {center.current_occupancy ?? 0} / {center.capacity}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -192,7 +228,43 @@ function EvacuationCenterCard({ center }) {
 
 export default function FloodMapPage() {
   const [mapView, setMapView] = useState('2d'); // '2d' | '3d'
+  const [centers, setCenters] = useState(FALLBACK_EVACUATION_CENTERS);
+  const [usingFallback, setUsingFallback] = useState(false);
   const boundaryPositions = TRIANGULO_BOUNDARY.map(p => [p.lat, p.lng]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    supabase
+      .from('evacuation_centers')
+      .select('*')
+      .order('name')
+      .then(({ data, error }) => {
+        if (cancelled) return;
+
+        if (error || !data || data.length === 0) {
+          if (error) logger.error('evacuation_centers fetch failed:', error.message);
+          setCenters(FALLBACK_EVACUATION_CENTERS);
+          setUsingFallback(true);
+          return;
+        }
+
+        setCenters(data.map(row => ({
+          id: row.id,
+          name: row.name,
+          type: row.type,
+          address: row.address,
+          position: { lat: row.latitude, lng: row.longitude },
+          color: colorForType(row.type),
+          is_open: row.is_open,
+          capacity: row.capacity,
+          current_occupancy: row.current_occupancy,
+        })));
+        setUsingFallback(false);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="fade-in">
@@ -207,6 +279,7 @@ export default function FloodMapPage() {
             </div>
             <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
               Tap a marker for details
+              {usingFallback && ' · ⚠ showing built-in data — evacuation_centers table unreachable or empty'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -253,7 +326,7 @@ export default function FloodMapPage() {
               }}
             />
 
-            {EVACUATION_CENTERS.map((center) => (
+            {centers.map((center) => (
               <Marker
                 key={center.id}
                 position={[center.position.lat, center.position.lng]}
@@ -284,13 +357,13 @@ export default function FloodMapPage() {
             ))}
           </MapContainer>
         ) : (
-          <EvacuationMap3D boundary={TRIANGULO_BOUNDARY} evacuationCenters={EVACUATION_CENTERS} />
+          <EvacuationMap3D boundary={TRIANGULO_BOUNDARY} evacuationCenters={centers} />
         )}
       </div>
 
       <SectionLabel>📍 Evacuation Center Details</SectionLabel>
       <div className="grid-2">
-        {EVACUATION_CENTERS.map(center => (
+        {centers.map(center => (
           <EvacuationCenterCard key={center.id} center={center} />
         ))}
       </div>
