@@ -223,12 +223,13 @@ function AlertLevelTable({ currentAlert }) {
 }
 
 function SystemStatusPanel({ modelError, modelLoading, prediction, forecastLoading, forecast }) {
+  const { activeModel } = useModelSelection();
   const modelOnline   = !modelError && !modelLoading && !!prediction;
   const forecastOnline = !forecastLoading && forecast.length > 0;
 
   const indicators = [
     {
-      label: 'GRU Prediction Engine',
+      label: `${activeModel.fullLabel} Prediction Engine`,
       status: modelLoading ? 'checking' : modelOnline ? 'online' : 'offline',
       detail: modelOnline
         ? `Last response: ${new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}`
@@ -294,13 +295,14 @@ function SystemStatusPanel({ modelError, modelLoading, prediction, forecastLoadi
 }
 
 function PredictionInputTable({ prediction }) {
+  const { activeModel } = useModelSelection();
   if (!prediction) return null;
   const m = prediction.live_metrics;
   const rows = [
     { label: 'Rainfall',          value: `${m.rainfall_mm?.toFixed(2) ?? '—'} mm/hr`, icon: '🌧', note: 'Primary flood driver' },
     { label: 'Humidity',          value: `${m.humidity ?? '—'}%`,                      icon: '💨', note: 'Atmospheric moisture' },
     { label: 'Wind Signal',       value: `Signal #${m.wind_signal ?? '—'}`,     icon: '🌀', note: 'PAGASA classification' },
-    { label: 'Flood Probability', value: `${(prediction.probability * 100).toFixed(1)}%`, icon: '🤖', note: 'GRU output confidence' },
+    { label: 'Flood Probability', value: `${(prediction.probability * 100).toFixed(1)}%`, icon: '🤖', note: `${activeModel.label} output confidence` },
     { label: 'Alert Level',       value: `Level ${prediction.alert_level}`,            icon: '🚦', note: 'Model classification' },
   ];
   return (
@@ -334,7 +336,7 @@ function PredictionInputTable({ prediction }) {
         fontSize: '0.63rem', color: 'var(--text-muted)',
         display: 'flex', justifyContent: 'space-between',
       }}>
-        <span>Model: GRU · Cloud Run (asia-southeast1)</span>
+        <span>Model: {activeModel.fullLabel}</span>
         <span>Poll interval: 30s</span>
       </div>
     </div>
@@ -451,6 +453,7 @@ function ModelTransparencyPanel({ prediction, activeModel }) {
 }
 
 function FloodForecastChart() {
+  const { activeModel } = useModelSelection();
   const [view, setView]           = useState('hourly');
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading]     = useState(true);
@@ -703,7 +706,7 @@ function FloodForecastChart() {
       )}
 
       <div style={{ marginTop: 10, fontSize: '0.62rem', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
-        <span>Source: flood_snapshots · GRU model output · Poll: 30s · Realtime subscription active</span>
+        <span>Source: flood_snapshots · {activeModel.label} model output · Poll: 30s · Realtime subscription active</span>
         <span>No physical sensor · For situational awareness only</span>
       </div>
     </div>
@@ -1273,7 +1276,7 @@ export default function Dashboard() {
       </div>
       
 
-      {/* ── 6. GRU Flood Probability Chart ───────────────────── */}
+      {/* ── 6. Flood Probability Chart (active algorithm) ──────── */}
       <FloodForecastChart />
 
       {/* ── 7. Forecast ───────────── */}

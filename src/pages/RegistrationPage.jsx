@@ -7,6 +7,7 @@ import { FaEyeSlash, FaEye, FaUser, FaPhone, FaAt, FaLock, FaUserShield, FaHome,
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabaseClient';
 import { SectionLabel } from '../components/ui';
+import { RESIDENT_ROLE_ID } from '../lib/roles';
 
 // Simple heuristic strength meter -- purely a UX nudge, does not change or
 // loosen the actual validation rule (still 8+ chars, enforced in handleSubmit).
@@ -50,10 +51,10 @@ export default function RegisterPage() {
     supabase.from('roles').select('*').then(({ data }) => {
       if (data) {
         setRoles(data);
-        const resident = data.find(r => r.role_id === 7);
+        const resident = data.find(r => r.role_id === RESIDENT_ROLE_ID);
         if (resident) {
           if (isResidentMode) {
-            setForm(f => ({ ...f, role_id: 7 }));
+            setForm(f => ({ ...f, role_id: RESIDENT_ROLE_ID }));
           }
         }
       }
