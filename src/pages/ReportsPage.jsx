@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { isAdmin, isResident } from '../lib/roles';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../hooks/useAuth';
@@ -68,9 +69,32 @@ const EMPTY_FORM = {
   model_alert_level:      'N/A',
   description:            '',
   status:                 'OPEN',
+  // Set only when this form was opened via "Promote to Official Report"
+  // from CommunityReportsPage -- links the new record back to the
+  // resident report it came from. Never user-editable.
+  source_incident_report_id: null,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Turns a verified community report (incident_reports row) into a starting
+// point for this form. Deliberately conservative: only fills fields the
+// resident's report can actually speak to (when/where/what happened).
+// Severity, water level, casualties, response time etc. are left at
+// defaults for the official to fill in themselves -- guessing those from a
+// one-line resident description would be worse than an empty field.
+function mapIncidentReportToFloodReport(report) {
+  const occurred = new Date(report.created_at);
+  const attribution = `[Promoted from a resident report by ${report.reporter_name ?? 'a resident'}] `;
+  return {
+    date_occurred: occurred.toISOString().slice(0, 10),
+    time_occurred: occurred.toTimeString().slice(0, 5),
+    location: report.location_label
+      || (report.latitude && report.longitude ? `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}` : ''),
+    description: attribution + (report.description ?? ''),
+    source_incident_report_id: report.id,
+  };
+}
 
 function exportCSV(records) {
   const headers = [
@@ -169,17 +193,17 @@ function StatSummary({ reports }) {
   })();
 
   const items = [
-    { label: 'Total Reports',       value: total,                                         color: 'var(--accent)', icon: '📋' },
-    { label: 'Open Incidents',      value: open,                                          color: '#ef4444',       icon: '🔴' },
-    { label: 'Critical Events',     value: critical,                                      color: '#f97316',       icon: '⚠️' },
-    { label: 'Households Affected', value: totalHH.toLocaleString(),                      color: '#eab308',       icon: '🏠' },
-    { label: 'Displaced Persons',   value: totalDisplaced.toLocaleString(),               color: '#f97316',       icon: '🚶' },
-    { label: 'Est. Damage (PHP)',    value: totalDamage > 0 ? `₱${(totalDamage/1000).toFixed(0)}K` : '—', color: '#ef4444', icon: '💸' },
+    { label: 'Total Reports',       value: total,                                         color: 'var(--accent)', icon: '' },
+    { label: 'Open Incidents',      value: open,                                          color: '#ef4444',       icon: '' },
+    { label: 'Critical Events',     value: critical,                                      color: '#f97316',       icon: '' },
+    { label: 'Households Affected', value: totalHH.toLocaleString(),                      color: '#eab308',       icon: '' },
+    { label: 'Displaced Persons',   value: totalDisplaced.toLocaleString(),               color: '#f97316',       icon: '' },
+    { label: 'Est. Damage (PHP)',    value: totalDamage > 0 ? `₱${(totalDamage/1000).toFixed(0)}K` : '—', color: '#ef4444', icon: '' },
     { label: 'Avg. Response',       value: avgResponse !== null ? `${avgResponse} min` : '—', color: '#22c55e', icon: '⏱' },
   ];
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 18 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 10, marginBottom: 18 }}>
       {items.map(({ label, value, color, icon }) => (
         <div key={label} className="card" style={{
           borderTop: `3px solid ${color}`,
@@ -263,8 +287,8 @@ function ReportCard({ report, onStatusChange, canEdit }) {
 
           {/* Environmental metrics */}
           <div style={{ marginTop: 14, marginBottom: 6 }}>
-            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>🌊 Environmental Data</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
+            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Environmental Data</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
               <MetricCell label="Water Level"           value={report.water_level        ? `${report.water_level}m`             : '—'} />
               <MetricCell label="Rainfall at Event"     value={report.rainfall_mm_at_event ? `${report.rainfall_mm_at_event} mm` : '—'} />
               <MetricCell label="Duration"              value={report.duration_hours      ? `${report.duration_hours} hrs`       : '—'} />
@@ -274,8 +298,8 @@ function ReportCard({ report, onStatusChange, canEdit }) {
 
           {/* Impact metrics */}
           <div style={{ marginBottom: 6 }}>
-            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>🏠 Impact Data</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
+            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Impact Data</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
               <MetricCell label="Households Affected" value={report.affected_hh         ? report.affected_hh.toLocaleString()     : '—'} />
               <MetricCell label="Displaced Persons"   value={report.displaced_persons   ? report.displaced_persons.toLocaleString() : '—'} />
               <MetricCell label="Casualties"          value={report.casualties          ?? '0'} />
@@ -286,7 +310,7 @@ function ReportCard({ report, onStatusChange, canEdit }) {
 
           {/* Response metrics */}
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>🚑 Response Data</div>
+            <div style={{ fontSize: '0.6rem', color: 'var(--text-muted)', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>Response Data</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
               <MetricCell label="Evacuation Center Used" value={report.evacuation_center_used ?? '—'} />
               <MetricCell label="Response Time"          value={report.response_time_minutes  ? `${report.response_time_minutes} min` : '—'} />
@@ -352,8 +376,8 @@ function ReportCard({ report, onStatusChange, canEdit }) {
   );
 }
 
-function ReportForm({ user, onSubmitted, onCancel }) {
-  const [form, setForm]     = useState(EMPTY_FORM);
+function ReportForm({ user, onSubmitted, onCancel, initialValues }) {
+  const [form, setForm]     = useState({ ...EMPTY_FORM, ...(initialValues || {}) });
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
 
@@ -397,11 +421,30 @@ function ReportForm({ user, onSubmitted, onCancel }) {
       model_alert_level:      form.model_alert_level,
       description:            form.description.trim(),
       status:                 form.status,
+      source_incident_report_id: form.source_incident_report_id || null,
     };
-    const { error } = await supabase.from('flood_reports').insert(payload);
+    const { data, error } = await supabase.from('flood_reports').insert(payload).select().single();
+    if (error) {
+      setSaving(false);
+      setErrors({ _global: error.message });
+      return;
+    }
+
+    // Mark the source community report as promoted so it doesn't get
+    // offered up for promotion again. Best-effort: the official report
+    // above is already saved either way, so a failure here just means
+    // the "already promoted" badge won't show -- not worth blocking on.
+    if (form.source_incident_report_id) {
+      const { error: linkError } = await supabase
+        .from('incident_reports')
+        .update({ promoted_report_id: data.id })
+        .eq('id', form.source_incident_report_id);
+      if (linkError) logger.error('Failed to link promoted report:', linkError.message);
+    }
+
     setSaving(false);
-    if (error) setErrors({ _global: error.message });
-    else { setForm(EMPTY_FORM); onSubmitted(); }
+    setForm(EMPTY_FORM);
+    onSubmitted();
   };
 
   const inputStyle = (key) => ({
@@ -431,11 +474,17 @@ function ReportForm({ user, onSubmitted, onCancel }) {
 
   return (
     <div className="card" style={{ marginBottom: 18 }}>
-      <SectionLabel>📝 File Flood Incident Report</SectionLabel>
+      <SectionLabel>File Flood Incident Report</SectionLabel>
+
+      {form.source_incident_report_id && (
+        <div style={{ padding: '9px 12px', background: 'rgba(56,189,248,0.08)', border: '1px solid rgba(56,189,248,0.25)', borderRadius: 6, fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: 14 }}>
+          Prefilled from a verified resident report — review and complete the fields below before submitting.
+        </div>
+      )}
 
       {errors._global && (
         <div style={{ padding: '9px 12px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: '0.8rem', color: '#f87171', marginBottom: 14 }}>
-          ⚠ {errors._global}
+          {errors._global}
         </div>
       )}
 
@@ -467,7 +516,7 @@ function ReportForm({ user, onSubmitted, onCancel }) {
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
         <div>
           {fieldLabel('Affected Location / Zone', true)}
-          <input type="text" placeholder="e.g. Purok 3, near Naga River" value={form.location} onChange={e => set('location', e.target.value)} style={inputStyle('location')} />
+          <input type="text" placeholder="e.g. Zone 3, near Naga River" value={form.location} onChange={e => set('location', e.target.value)} style={inputStyle('location')} />
           {errMsg('location')}
         </div>
         <div>
@@ -479,7 +528,7 @@ function ReportForm({ user, onSubmitted, onCancel }) {
       </div>
 
       {/* ── Environmental Data ── */}
-      {formSection('🌊 Environmental Data')}
+      {formSection('Environmental Data')}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 14 }}>
         <div>
           {fieldLabel('Max Water Level (m)')}
@@ -496,7 +545,7 @@ function ReportForm({ user, onSubmitted, onCancel }) {
       </div>
 
       {/* ── Impact Data ── */}
-      {formSection('🏠 Impact Data')}
+      {formSection('Impact Data')}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 14 }}>
         <div>
           {fieldLabel('Households Affected')}
@@ -518,11 +567,11 @@ function ReportForm({ user, onSubmitted, onCancel }) {
 
       <div style={{ marginBottom: 14 }}>
         {fieldLabel('Infrastructure Damage')}
-        <input type="text" placeholder="e.g. Damaged road at Purok 4, flooded school grounds" value={form.infrastructure_damage} onChange={e => set('infrastructure_damage', e.target.value)} style={inputStyle('infrastructure_damage')} />
+        <input type="text" placeholder="e.g. Damaged road at Zone 4, flooded school grounds" value={form.infrastructure_damage} onChange={e => set('infrastructure_damage', e.target.value)} style={inputStyle('infrastructure_damage')} />
       </div>
 
       {/* ── Response Data ── */}
-      {formSection('🚑 Response Data')}
+      {formSection('Response Data')}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
         <div>
           {fieldLabel('Evacuation Center Used')}
@@ -537,7 +586,7 @@ function ReportForm({ user, onSubmitted, onCancel }) {
       </div>
 
       {/* ── Narrative ── */}
-      {formSection('📄 Narrative')}
+      {formSection('Narrative')}
       <div style={{ marginBottom: 14 }}>
         {fieldLabel('Incident Description', true)}
         <textarea
@@ -590,7 +639,7 @@ function ReportForm({ user, onSubmitted, onCancel }) {
             disabled={saving}
             style={{ fontSize: '0.82rem', padding: '8px 20px', opacity: saving ? 0.7 : 1 }}
           >
-            {saving ? '⏳ Saving...' : '✅ Submit Report'}
+            {saving ? '⏳ Saving...' : 'Submit Report'}
           </button>
         </div>
       </div>
@@ -638,9 +687,9 @@ function ModelAccuracyPanel({ reports }) {
     m === 'under-1'    ? '#f97316' : '#ef4444';
 
   const matchLabel = (m) =>
-    m === 'exact'      ? '✅ Exact match' :
-    m === 'over'       ? '🟡 Over-predicted' :
-    m === 'under-1'    ? '🟠 Under by 1 level' : '🔴 Significant miss';
+    m === 'exact'      ? 'Exact match' :
+    m === 'over'       ? 'Over-predicted' :
+    m === 'under-1'    ? 'Under by 1 level' : 'Significant miss';
 
   return (
     <div className="card" style={{ marginBottom: 18 }}>
@@ -649,7 +698,7 @@ function ModelAccuracyPanel({ reports }) {
         textTransform: 'uppercase', color: 'var(--text-muted)',
         marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid var(--blue-border)',
       }}>
-        🤖 AGOS Model Accuracy — Predicted vs. Actual Alert Level
+        AGOS Model Accuracy — Predicted vs. Actual Alert Level
       </div>
 
       {/* Summary stats */}
@@ -676,12 +725,12 @@ function ModelAccuracyPanel({ reports }) {
         background: 'rgba(56,189,248,0.05)', border: '1px solid rgba(56,189,248,0.15)',
         borderRadius: 6, fontSize: '0.72rem', color: 'var(--text-muted)',
       }}>
-        ℹ️ Accuracy is computed by comparing <strong style={{ color: 'var(--text-secondary)' }}>AGOS Model Alert Level</strong> (what the system predicted at time of incident) against the <strong style={{ color: 'var(--text-secondary)' }}>Actual Severity</strong> recorded by the reporting officer. Only reports with both fields filled are included.
+        ℹAccuracy is computed by comparing <strong style={{ color: 'var(--text-secondary)' }}>AGOS Model Alert Level</strong> (what the system predicted at time of incident) against the <strong style={{ color: 'var(--text-secondary)' }}>Actual Severity</strong> recorded by the reporting officer. Only reports with both fields filled are included.
       </div>
 
       {/* Per-record comparison table */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--blue-border)' }}>
               {['Date', 'Location', 'AGOS Predicted', 'Actual Severity', 'Result'].map(h => (
@@ -741,15 +790,35 @@ function ModelAccuracyPanel({ reports }) {
 export default function HistoricalPage() {
   const { user } = useAuth();
   const userIsResident = isResident(user);
+  const location = useLocation();
+  const navigate = useNavigate();
   const [reports,        setReports]        = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [showForm,       setShowForm]       = useState(false);
+  const [promoteInitialValues, setPromoteInitialValues] = useState(null);
   const [filterSeverity, setFilterSeverity] = useState('ALL');
   const [filterStatus,   setFilterStatus]   = useState('ALL');
   const [filterSource,   setFilterSource]   = useState('ALL');
   const [searchText,     setSearchText]     = useState('');
   const [successMsg,     setSuccessMsg]     = useState('');
   const [exporting,      setExporting]      = useState(false);
+
+  // Arriving here via CommunityReportsPage's "Promote to Official Report"
+  // button: open the form pre-filled, then immediately clear the router
+  // state so a page refresh or back-navigation doesn't reopen it.
+  useEffect(() => {
+    if (location.state?.promoteFrom) {
+      setPromoteInitialValues(mapIncidentReportToFloodReport(location.state.promoteFrom));
+      setShowForm(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const closeForm = () => {
+    setShowForm(false);
+    setPromoteInitialValues(null);
+  };
 
   const fetchReports = useCallback(async () => {
     setLoading(true);
@@ -765,7 +834,7 @@ export default function HistoricalPage() {
   useEffect(() => { fetchReports(); }, [fetchReports]);
 
   const handleSubmitted = () => {
-    setShowForm(false);
+    closeForm();
     setSuccessMsg('Report submitted successfully.');
     fetchReports();
     setTimeout(() => setSuccessMsg(''), 4000);
@@ -821,7 +890,7 @@ export default function HistoricalPage() {
                 disabled={exporting || filtered.length === 0}
                 style={{ fontSize: '0.78rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 5 }}
               >
-                📥 Export CSV
+                Export CSV
                 {filtered.length !== reports.length && (
                   <span style={{ fontSize: '0.65rem', background: 'var(--accent)', color: '#fff', borderRadius: 3, padding: '1px 5px', marginLeft: 2 }}>
                     {filtered.length}
@@ -834,7 +903,7 @@ export default function HistoricalPage() {
                 disabled={exporting || filtered.length === 0}
                 style={{ fontSize: '0.78rem', padding: '7px 14px', display: 'flex', alignItems: 'center', gap: 5 }}
               >
-                📥 Export JSON
+                Export JSON
                 {filtered.length !== reports.length && (
                   <span style={{ fontSize: '0.65rem', background: 'var(--accent)', color: '#fff', borderRadius: 3, padding: '1px 5px', marginLeft: 2 }}>
                     {filtered.length}
@@ -860,7 +929,7 @@ export default function HistoricalPage() {
           borderLeft: '3px solid #22c55e', borderRadius: 'var(--radius-sm)',
           fontSize: '0.82rem', color: '#4ade80',
         }}>
-          ✅ {successMsg}
+          {successMsg}
         </div>
       )}
 
@@ -869,7 +938,8 @@ export default function HistoricalPage() {
         <ReportForm
           user={user}
           onSubmitted={handleSubmitted}
-          onCancel={() => setShowForm(false)}
+          onCancel={closeForm}
+          initialValues={promoteInitialValues}
         />
       )}
 
@@ -951,7 +1021,7 @@ export default function HistoricalPage() {
           background: 'rgba(56,189,248,0.05)', border: '1px solid rgba(56,189,248,0.15)',
           borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', color: 'var(--text-muted)',
         }}>
-          <span>📊</span>
+          <span></span>
           <span>
             Export respects active filters — only {filtered.length === reports.length ? 'all' : `${filtered.length} filtered`} record{filtered.length !== 1 ? 's' : ''} will be included.
             CSV is suitable for Excel / Google Sheets analysis; JSON for programmatic use.
@@ -961,7 +1031,7 @@ export default function HistoricalPage() {
 
       {/* ── Report List ───────────────────────────────────────────── */}
       <div className="card">
-        <SectionLabel>🌊 Incident Records</SectionLabel>
+        <SectionLabel>Incident Records</SectionLabel>
 
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -975,7 +1045,7 @@ export default function HistoricalPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div style={{ padding: '40px 0', textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', marginBottom: 8, opacity: 0.3 }}>📭</div>
+            <div style={{ fontSize: '2rem', marginBottom: 8, opacity: 0.3 }}></div>
             <div style={{ fontSize: '0.88rem', color: 'var(--text-muted)', fontWeight: 600 }}>
               {reports.length === 0 ? 'No reports filed yet.' : 'No records match the selected filters.'}
             </div>

@@ -1,14 +1,19 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
+import { useLanguage } from '../hooks/useLanguage';
 import { useDataSource } from '../hooks/useDataSource';
 import { useModelSelection } from '../hooks/useModelSelection';
 import { isAdmin } from '../lib/roles';
+import { LuMenu } from 'react-icons/lu';
 
-export default function Topbar({ title, onMenuClick, alertLevel }) {
+export default function Topbar({ title, onMenuClick, menuOpen, alertLevel }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const { lang, setLang, languages } = useLanguage();
   const { isMock, toggleDataSource } = useDataSource();
   const { modelKey, setModelKey, options: modelOptions } = useModelSelection();
   const [time, setTime] = useState(new Date());
@@ -53,32 +58,33 @@ export default function Topbar({ title, onMenuClick, alertLevel }) {
 
   return (
     <div className="topbar">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+      <div className="topbar-left">
         <button
+          type="button"
           onClick={onMenuClick}
           className="mobile-menu-btn"
           aria-label="Open navigation menu"
-          style={{ display: 'none', background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: '1.3rem', cursor: 'pointer', padding: '4px' }}
+          aria-expanded={!!menuOpen}
+          aria-controls="app-sidebar"
         >
-          ☰
+          <LuMenu size={22} aria-hidden="true" />
         </button>
-        <div>
+        <div className="topbar-titles">
           <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)' }}>
             {title}
           </h1>
-          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-            Barangay Triangulo, Naga City · Bicol Region
-          </div>
+          <div className="topbar-sub">Barangay Triangulo, Naga City · Bicol Region</div>
         </div>
       </div>
 
-      <div className="topbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      <div className="topbar-controls">
 
         {/* Algorithm switcher — GRU / LSTM / CNN. All three are trained on
             the same scaler/feature contract, so switching here just tells
             the backend which encoder-decoder to run; every page reading
             from useModelPrediction/useFloodForecast14Day updates to match. */}
         <div
+          className="hide-mobile"
           title="Switch which trained algorithm powers predictions and forecasts"
           style={{
             display: 'flex', gap: 0, background: 'var(--blue-mid)',
@@ -120,23 +126,42 @@ export default function Topbar({ title, onMenuClick, alertLevel }) {
               border: 'none',
             }}
           >
-            {isMock ? 'MOCK DATA' : 'LIVE DATA'}
+            <span>{isMock ? 'MOCK' : 'LIVE'}<span className="hide-mobile"> DATA</span></span>
             <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>⇄</span>
           </button>
         )}
 
+        {/* Language — alert wording and evacuation guidance are translated;
+            covers Naga City's everyday languages so the highest-stakes
+            text during an emergency isn't English-only. */}
+        <select
+          value={lang}
+          onChange={e => setLang(e.target.value)}
+          aria-label="Choose language"
+          title="Choose language"
+          style={{
+            background: 'var(--blue-mid)', border: '1px solid var(--blue-border)',
+            color: 'var(--text-secondary)', borderRadius: 6,
+            fontSize: '0.76rem', fontWeight: 600, padding: '7px 8px', cursor: 'pointer',
+          }}
+        >
+          {languages.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+        </select>
+
         {/* Dark / Light toggle */}
         <button
-          className="theme-toggle"
+          className="theme-toggle hide-mobile"
+          role="switch"
+          aria-checked={theme === 'dark'}
           onClick={toggleTheme}
           title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
-          {theme === 'dark' ? '☀️' : '🌙'}
+          <span className="theme-toggle-knob" aria-hidden="true" />
         </button>
 
         {/* Clock */}
-        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }} className="hide-mobile">
+        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }} className="hide-mobile hide-tablet">
           <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.05em' }}>
             {time.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </div>
@@ -144,17 +169,30 @@ export default function Topbar({ title, onMenuClick, alertLevel }) {
             {time.toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
           </div>
         </div>
+
+        {/* Sign-in — the app is fully browsable without an account (this
+            is a public early-warning tool); logging in only unlocks
+            staff/admin actions (dispatching alerts, moderating reports,
+            registering accounts). Shown in place of nothing when signed
+            out; once signed in, the account panel lives in the Sidebar
+            instead of duplicating it up here. */}
+        {!user && (
+          <button
+            className="btn hide-mobile"
+            onClick={() => navigate('/login')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              background: 'var(--accent)', color: '#fff',
+              fontSize: '0.78rem', fontWeight: 700,
+              padding: '8px 16px', border: 'none', borderRadius: 6,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Staff sign in
+          </button>
+        )}
       </div>
 
-      <style>{`
-        @media (max-width: 768px) {
-          .mobile-menu-btn { display: block !important; }
-          .topbar-actions { gap: 8px !important; flex: 1 1 100%; justify-content: flex-start !important; }
-        }
-        @media (max-width: 480px) {
-          .topbar-actions button { padding: 6px 9px !important; font-size: 0.68rem !important; }
-        }
-      `}</style>
     </div>
   );
 }

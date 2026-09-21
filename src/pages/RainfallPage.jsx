@@ -6,7 +6,6 @@ import {
 } from 'recharts';
 import { supabase } from '../lib/supabaseClient';
 import { SectionLabel } from '../components/ui';
-import { useModelSelection } from '../hooks/useModelSelection';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -103,11 +102,11 @@ function getRainfallCategory(mm, period = 'hourly') {
 
 function getRainfallEmoji(mm, period = 'hourly') {
   const cat = getRainfallCategory(mm, period);
-  if (cat.label === 'Torrential') return '🌊';
-  if (cat.label === 'Intense')    return '⛈';
-  if (cat.label === 'Heavy')      return '🌧';
-  if (cat.label === 'Moderate')   return '🌦';
-  return '🌤';
+  if (cat.label === 'Torrential') return '';
+  if (cat.label === 'Intense')    return '';
+  if (cat.label === 'Heavy')      return '';
+  if (cat.label === 'Moderate')   return '';
+  return '';
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -207,9 +206,8 @@ export default function RainfallPage() {
   const [hourlyLogs, setHourlyLogs]   = useState([]);
   const [lastFetched, setLastFetched] = useState(null);
 
-  const { prediction }  = useOutletContext();
-  const { activeModel } = useModelSelection();
-  const liveRainfall    = prediction?.live_metrics?.rainfall_mm ?? null;
+  const { prediction } = useOutletContext();
+  const liveRainfall   = prediction?.live_metrics?.rainfall_mm ?? null;
 
   const fetchRainfall = useCallback(async () => {
     const since        = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
@@ -310,7 +308,7 @@ export default function RainfallPage() {
           borderLeft: '3px solid #ef4444', borderRadius: 'var(--radius-sm)',
           fontSize: '0.8rem', color: '#f87171',
         }}>
-          ⚠ <strong>Data may be stale</strong> — last update was over 5 minutes ago. Check backend connectivity.
+          <strong>Data may be stale</strong> — last update was over 5 minutes ago. Check backend connectivity.
         </div>
       )}
 
@@ -328,18 +326,18 @@ export default function RainfallPage() {
             label: 'Total Accumulated',
             value: `${total}`,
             unit: 'mm',
-            icon: '☔',
+            icon: '',
             color: 'var(--accent)',
             sub: period === 'hourly' ? 'Last 24 hours · hourly average' : 'Last 7 days · daily total',
           },
           {
-            label: 'Peak Intensity',
+            label: period === 'hourly' ? 'Peak Intensity' : 'Peak Day',
             value: `${peak}`,
-            unit: 'mm/hr',
-            icon: '⚡',
-            color: peak >= 30 ? '#7c3aed' : peak >= 15 ? '#ef4444' : peak >= 7.5 ? '#f97316' : peak >= 2.5 ? '#eab308' : '#22c55e',
+            unit: period === 'hourly' ? 'mm/hr' : 'mm',
+            icon: '',
+            color: peak > 0 ? getRainfallCategory(peak, period).color : '#22c55e',
             sub: peak > 0
-              ? `${getRainfallCategory(peak, 'hourly').label} intensity · ${getRainfallCategory(peak, 'hourly').pagasa}`
+              ? `${getRainfallCategory(peak, period).label}${period === 'hourly' ? ' intensity' : ''} · ${getRainfallCategory(peak, period).pagasa}`
               : 'No rainfall recorded',
           },
           {
@@ -358,12 +356,12 @@ export default function RainfallPage() {
             label: '6-Hr Accumulation',
             value: acc6hr != null ? `${acc6hr}` : '—',
             unit: acc6hr != null ? 'mm' : '',
-            icon: '🌊',
+            icon: '',
             color: acc6hrCat?.color ?? 'var(--text-muted)',
             sub: acc6hr != null
               ? `PAGASA Intense threshold at 15mm/hr · 6-hr window`
               : 'Insufficient hourly data',
-            badge: acc6hr != null && acc6hr >= 15 ? '⚠ Above Intense' : null,
+            badge: acc6hr != null && acc6hr >= 15 ? 'Above Intense' : null,
             badgeColor: '#ef4444',
           },
         ].map(c => (
@@ -408,7 +406,7 @@ export default function RainfallPage() {
       {/* ── Main Chart Card ────────────────────────────────────────── */}
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-title" style={{ marginBottom: 14 }}>
-          🌧 Rainfall {period === 'hourly' ? 'Intensity (mm/hr)' : 'Accumulation (mm/24hr)'}
+          Rainfall {period === 'hourly' ? 'Intensity (mm/hr)' : 'Accumulation (mm/24hr)'}
           <div style={{
             marginLeft: 'auto', display: 'flex', gap: 8,
             fontFamily: 'var(--font-body)', fontWeight: 400,
@@ -422,8 +420,8 @@ export default function RainfallPage() {
             )}
             <button className={`btn ${period === 'hourly' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setPeriod('hourly')} style={{ padding: '4px 12px', fontSize: '0.75rem' }}>Hourly</button>
             <button className={`btn ${period === 'daily'  ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setPeriod('daily')}  style={{ padding: '4px 12px', fontSize: '0.75rem' }}>Daily</button>
-            <button className={`btn ${view === 'chart' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setView('chart')} style={{ padding: '4px 12px', fontSize: '0.75rem' }}>📈</button>
-            <button className={`btn ${view === 'table' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setView('table')} style={{ padding: '4px 12px', fontSize: '0.75rem' }}>📋</button>
+            <button className={`btn ${view === 'chart' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setView('chart')} style={{ padding: '4px 12px', fontSize: '0.75rem' }}></button>
+            <button className={`btn ${view === 'table' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setView('table')} style={{ padding: '4px 12px', fontSize: '0.75rem' }}></button>
           </div>
         </div>
 
@@ -435,13 +433,13 @@ export default function RainfallPage() {
           border: '1px solid var(--blue-border)',
         }}>
           {period === 'hourly'
-            ? '📏 Thresholds based on PAGASA hourly rainfall intensity classification (mm/hr) · Philippine Atmospheric, Geophysical and Astronomical Services Administration'
-            : '📏 Thresholds based on PAGASA 24-hour accumulated rainfall classification (mm/24hr) · Philippine Atmospheric, Geophysical and Astronomical Services Administration'}
+            ? 'Thresholds based on PAGASA hourly rainfall intensity classification (mm/hr) · Philippine Atmospheric, Geophysical and Astronomical Services Administration'
+            : 'Thresholds based on PAGASA 24-hour accumulated rainfall classification (mm/24hr) · Philippine Atmospheric, Geophysical and Astronomical Services Administration'}
         </div>
 
         {data.length === 0 ? (
           <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', padding: '40px 0', textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', marginBottom: 8, opacity: 0.3 }}>🌤</div>
+            <div style={{ fontSize: '2rem', marginBottom: 8, opacity: 0.3 }}></div>
             No data yet — logs will appear once the backend starts recording.
           </div>
         ) : view === 'chart' ? (
@@ -532,7 +530,7 @@ export default function RainfallPage() {
       {/* ── PAGASA Threshold Reference ────────────────────────────── */}
       <div className="card" style={{ padding: '14px 20px' }}>
         <SectionLabel>
-          📏 PAGASA Rainfall Classification —{' '}
+          PAGASA Rainfall Classification —{' '}
           {period === 'hourly' ? 'Hourly Intensity (mm/hr)' : '24-Hour Accumulation (mm/24hr)'}
         </SectionLabel>
 
@@ -597,11 +595,7 @@ export default function RainfallPage() {
               https://www.pagasa.dost.gov.ph/information/rainfall-information
             </span>
           </div>
-          <div style={{ marginTop: 2 }}>
-            {prediction
-              ? `🔵 Live data source: Open-Meteo Weather API via ${activeModel.fullLabel} · Poll interval: 30s`
-              : '⚪ Fallback source: PAGASA Weather Station · Naga City'}
-          </div>
+          
         </div>
       </div>
 
