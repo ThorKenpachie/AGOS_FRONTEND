@@ -1,24 +1,30 @@
-import { useState, useRef, useMemo } from 'react';
-import { MapContainer, TileLayer, Polygon as LeafletPolygon, Polyline, Marker, Popup } from 'react-leaflet';
+import { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, Polygon as LeafletPolygon, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import EvacuationMap3D from '../components/EvacuationMap3D';
-import { SectionLabel, ExpandableMapFrame, MapRecenterButton } from '../components/ui';
-import trianguloRoads from '../data/trianguloRoads.json';
-import { buildRoadGraph, findNearestCenterByRoad } from '../lib/routing';
-import { formatDistanceKm } from '../lib/geo';
+import { SectionLabel } from '../components/ui';
+import { supabase } from '../lib/supabaseClient';
+import { logger } from '../lib/logger';
 
-// Shared between the initial 2D map setup and its recenter button.
-const DEFAULT_2D_VIEW = { center: [13.618, 123.1905], zoom: 15.5 };
+// Color is derived from `type` rather than stored in the DB -- keeps the
+// legend's two categories (Primary / School) driving the marker color even
+// as more centers with new `type` values get added later.
+function colorForType(type) {
+  return /primary/i.test(type ?? '') ? '#ef4444' : '#3b82f6';
+}
 
-// ─── Evacuation Centers ─────────────────────────────────────────────────────
-const EVACUATION_CENTERS = [
+// Used only if the live evacuation_centers table is empty or unreachable --
+// see fetchCenters() below. Keeps the map from going blank on a fetch
+// hiccup, same defensive pattern as the rest of the app (e.g. Dashboard's
+// offline banner still shows fallback data instead of a blank page).
+const FALLBACK_EVACUATION_CENTERS = [
   {
     id: 'jesse-robredo',
     name: 'Jesse M. Robredo Coliseum',
     type: 'Primary Evacuation Center',
     position: { lat: 13.620122, lng: 123.188095 },
-    address:'Ninoy and Cory Ave, Naga City, Camarines Sur',
+    address: 'Ninoy and Cory Ave, Naga City, Camarines Sur',
     color: '#ef4444',
   },
   {
@@ -26,7 +32,7 @@ const EVACUATION_CENTERS = [
     name: 'Triangulo Elementary School',
     type: 'School Evacuation Center',
     position: { lat: 13.6165193, lng: 123.1878926 },
-    address:'CBD II, Diversion Road, Barangay Triangulo, Naga City, 4400 Camarines Sur',
+    address: 'CBD II, Diversion Road, Barangay Triangulo, Naga City, 4400 Camarines Sur',
     color: '#3b82f6',
   },
   {
@@ -34,7 +40,7 @@ const EVACUATION_CENTERS = [
     name: 'Jose Rizal Elementary School',
     type: 'School Evacuation Center',
     position: { lat: 13.6194395, lng: 123.1933071 },
-    address: ' J59W+Q9C, Ilang-ilang St, Barangay Triangulo, Naga City, 4400 Camarines Sur',
+    address: 'J59W+Q9C, Ilang-ilang St, Barangay Triangulo, Naga City, 4400 Camarines Sur',
     color: '#3b82f6',
   },
 ];
@@ -96,50 +102,28 @@ const TRIANGULO_BOUNDARY = [
 //     the marker's coordinates regardless of label width. ─────────────────────
 function createCenterIcon(center) {
   const html = `
-    <div style="position:relative; width:30px; height:30px;">
+    <div style="width:140px; display:flex; flex-direction:column; align-items:center;">
       <div style="
-        position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
-        margin-bottom:6px;
         background:${center.color}; color:#fff; font-size:10px; font-weight:700;
-        padding:2px 7px; border-radius:4px; white-space:nowrap;
+        padding:2px 7px; border-radius:4px; white-space:nowrap; margin-bottom:4px;
         box-shadow:0 1px 4px rgba(0,0,0,0.25);
       ">
         ${center.name}
       </div>
-      <div style="
-        position:absolute; inset:0; border-radius:50%;
-        background:${center.color}33; border:2px solid ${center.color};
-      "></div>
-      <div style="
-        position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-        width:12px; height:12px; border-radius:50%;
-        background:${center.color}; border:2px solid #fff;
-        box-shadow:0 1px 3px rgba(0,0,0,0.35);
-      "></div>
+      <svg width="24" height="32" viewBox="0 0 24 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 0C5.37 0 0 5.37 0 12c0 8.25 12 20 12 20s12-11.75 12-20C24 5.37 18.63 0 12 0z" fill="${center.color}" />
+        <circle cx="12" cy="12" r="4" fill="white" />
+      </svg>
     </div>
   `;
   return L.divIcon({
     html,
     className: '', // clears Leaflet's default white-square marker background
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],   // center of the circle = the exact coordinate
-    popupAnchor: [0, -20],
+    iconSize: [140, 56],
+    iconAnchor: [70, 56],   // bottom-center of the box = pin's tip
+    popupAnchor: [0, -60],  // pop the popup up above the label
   });
 }
-
-// Simple pulsing dot for "you are here" -- deliberately plainer than the
-// evacuation-center pins so it doesn't compete with them visually.
-const USER_LOCATION_ICON = L.divIcon({
-  html: `
-    <div style="position:relative; width:20px; height:20px;">
-      <div style="position:absolute; inset:0; border-radius:50%; background:#38bdf8; opacity:0.28; animation: pulse-ring 1.6s ease-out infinite;"></div>
-      <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:12px; height:12px; border-radius:50%; background:#38bdf8; border:2px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,0.4);"></div>
-    </div>
-  `,
-  className: '',
-  iconSize: [20, 20],
-  iconAnchor: [10, 10],
-});
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -166,18 +150,40 @@ function EvacuationCenterCard({ center }) {
       display: 'flex', flexDirection: 'column', gap: 10,
     }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+          background: `${center.color}18`, border: `1px solid ${center.color}40`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '1.1rem',
+        }}>
+          🏫
+        </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3 }}>
             {center.name}
           </div>
-          <div style={{
-            display: 'inline-flex', marginTop: 4,
-            fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em',
-            background: `${center.color}18`, color: center.color,
-            border: `1px solid ${center.color}40`,
-            borderRadius: 4, padding: '2px 7px',
-          }}>
-            {center.type.toUpperCase()}
+          <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'inline-flex',
+              fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em',
+              background: `${center.color}18`, color: center.color,
+              border: `1px solid ${center.color}40`,
+              borderRadius: 4, padding: '2px 7px',
+            }}>
+              {center.type.toUpperCase()}
+            </div>
+            {center.is_open != null && (
+              <div style={{
+                display: 'inline-flex',
+                fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em',
+                background: center.is_open ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.12)',
+                color: center.is_open ? '#22c55e' : '#ef4444',
+                border: `1px solid ${center.is_open ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`,
+                borderRadius: 4, padding: '2px 7px',
+              }}>
+                {center.is_open ? 'OPEN' : 'CLOSED'}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -187,6 +193,14 @@ function EvacuationCenterCard({ center }) {
         background: 'var(--blue-mid)', border: '1px solid var(--blue-border)',
         borderRadius: 6, padding: '8px 12px',
       }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            Coordinates
+          </span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+            {center.position.lat.toFixed(4)}, {center.position.lng.toFixed(4)}
+          </span>
+        </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0 }}>
             Address
@@ -195,6 +209,16 @@ function EvacuationCenterCard({ center }) {
             {center.address}
           </span>
         </div>
+        {center.capacity != null && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Occupancy
+            </span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+              {center.current_occupancy ?? 0} / {center.capacity}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -204,85 +228,65 @@ function EvacuationCenterCard({ center }) {
 
 export default function FloodMapPage() {
   const [mapView, setMapView] = useState('2d'); // '2d' | '3d'
-  const mapRef = useRef(null);
+  const [centers, setCenters] = useState(FALLBACK_EVACUATION_CENTERS);
+  const [usingFallback, setUsingFallback] = useState(false);
   const boundaryPositions = TRIANGULO_BOUNDARY.map(p => [p.lat, p.lng]);
 
-  // Road graph is built once from the bundled OSM street data and reused
-  // for every "find nearest center" lookup -- routing runs entirely
-  // client-side against it, no external routing API or network call.
-  const roadGraph = useMemo(() => buildRoadGraph(trianguloRoads), []);
+  useEffect(() => {
+    let cancelled = false;
 
-  const [locating, setLocating] = useState(false);
-  const [locateError, setLocateError] = useState(null);
-  const [route, setRoute] = useState(null); // { center, totalKm, walkMinutes, path, userPoint }
+    supabase
+      .from('evacuation_centers')
+      .select('*')
+      .order('name')
+      .then(({ data, error }) => {
+        if (cancelled) return;
 
-  const handleFindNearest = () => {
-    if (!navigator.geolocation) {
-      setLocateError('Location isn\u2019t available on this device/browser.');
-      return;
-    }
-    setLocating(true);
-    setLocateError(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const userPoint = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const result = findNearestCenterByRoad(roadGraph, userPoint, EVACUATION_CENTERS);
-        setLocating(false);
-        if (!result) {
-          setLocateError('Couldn\u2019t find a road route from your location.');
+        if (error || !data || data.length === 0) {
+          if (error) logger.error('evacuation_centers fetch failed:', error.message);
+          setCenters(FALLBACK_EVACUATION_CENTERS);
+          setUsingFallback(true);
           return;
         }
-        setRoute({ ...result, userPoint });
-        mapRef.current?.fitBounds(result.path.map(p => [p.lat, p.lng]), { padding: [40, 40] });
-      },
-      (err) => {
-        setLocating(false);
-        setLocateError(
-          err.code === err.PERMISSION_DENIED
-            ? 'Location permission was denied.'
-            : 'Couldn\u2019t get your location. Try again.'
-        );
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
+
+        setCenters(data.map(row => ({
+          id: row.id,
+          name: row.name,
+          type: row.type,
+          address: row.address,
+          position: { lat: row.latitude, lng: row.longitude },
+          color: colorForType(row.type),
+          is_open: row.is_open,
+          capacity: row.capacity,
+          current_occupancy: row.current_occupancy,
+        })));
+        setUsingFallback(false);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="fade-in">
       <div className="card" style={{ marginBottom: 18, padding: 0, overflow: 'hidden' }}>
-        <div className="title-band-bar" style={{
+        <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '14px 18px', borderBottom: '1px solid var(--blue-border)', flexWrap: 'wrap', gap: 10,
-          background: 'var(--title-band)',
         }}>
           <div>
             <div className="card-title" style={{ marginBottom: 2 }}>
-              Evacuation Route Map
+              🚨 Evacuation Route Map — Barangay Triangulo
             </div>
             <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
               Tap a marker for details
+              {usingFallback && ' · ⚠ showing built-in data — evacuation_centers table unreachable or empty'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <LegendItem color="#ef4444" label="Primary Evacuation Center" />
             <LegendItem color="#3b82f6" label="School Evacuation Center" />
             <LegendItem color="#38bdf8" label="Barangay Boundary" shape="line" />
-            {route && <LegendItem color="#22c55e" label="Route (via roads)" shape="line" />}
-            <button
-              onClick={handleFindNearest}
-              disabled={locating}
-              className="toggle-pill"
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                padding: '6px 14px', fontSize: '0.72rem', fontWeight: 700,
-                letterSpacing: '0.04em', cursor: locating ? 'default' : 'pointer',
-                border: 'none', borderRadius: 6, color: '#fff',
-                background: locating ? 'var(--blue-border)' : '#22c55e',
-              }}
-            >
-              {locating ? 'Locating…' : '📍 Find Nearest Evacuation Center'}
-            </button>
-            <div className="view-toggle-group" style={{ display: 'flex', gap: 0, background: 'var(--blue-mid)', border: '1px solid var(--blue-border)', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ display: 'flex', gap: 0, background: 'var(--blue-mid)', border: '1px solid var(--blue-border)', borderRadius: 6, overflow: 'hidden' }}>
               {['2d', '3d'].map(v => (
                 <button key={v} onClick={() => setMapView(v)} style={{
                   padding: '5px 14px', fontSize: '0.7rem', fontWeight: 700,
@@ -298,39 +302,12 @@ export default function FloodMapPage() {
           </div>
         </div>
 
-        {(route || locateError) && (
-          <div style={{
-            padding: '10px 18px', borderBottom: '1px solid var(--blue-border)',
-            background: route ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
-          }}>
-            {route ? (
-              <>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
-                  Nearest by road: <strong>{route.center.name}</strong>
-                  <span style={{ color: 'var(--text-muted)' }}> — {formatDistanceKm(route.totalKm)} along streets, ~{route.walkMinutes} min walk</span>
-                </div>
-                <button
-                  onClick={() => setRoute(null)}
-                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Clear route
-                </button>
-              </>
-            ) : (
-              <div style={{ fontSize: '0.8rem', color: '#f87171' }}>{locateError}</div>
-            )}
-          </div>
-        )}
-
-        <ExpandableMapFrame height={500}>
         {mapView === '2d' ? (
           <MapContainer
-            ref={mapRef}
-            center={DEFAULT_2D_VIEW.center}
-            zoom={DEFAULT_2D_VIEW.zoom}
+            center={[13.618, 123.1905]}
+            zoom={15.5}
             scrollWheelZoom={true}
-            style={{ width: '100%', height: '100%' }}
+            style={{ width: '100%', height: 500 }}
           >
             <TileLayer
               // OpenStreetMap standard tiles — free, no API key required
@@ -349,19 +326,7 @@ export default function FloodMapPage() {
               }}
             />
 
-            {route && (
-              <>
-                <Polyline
-                  positions={route.path.map(p => [p.lat, p.lng])}
-                  pathOptions={{ color: '#22c55e', weight: 5, opacity: 0.85, dashArray: '1 8', lineCap: 'round' }}
-                />
-                <Marker position={[route.userPoint.lat, route.userPoint.lng]} icon={USER_LOCATION_ICON}>
-                  <Popup>You are here</Popup>
-                </Marker>
-              </>
-            )}
-
-            {EVACUATION_CENTERS.map((center) => (
+            {centers.map((center) => (
               <Marker
                 key={center.id}
                 position={[center.position.lat, center.position.lng]}
@@ -370,7 +335,7 @@ export default function FloodMapPage() {
                 <Popup>
                   <div style={{ minWidth: 200, padding: '4px 2px' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: 4 }}>
-                      {center.name}
+                      🏫 {center.name}
                     </div>
                     <div style={{
                       display: 'inline-block', fontSize: '0.65rem', fontWeight: 700,
@@ -381,7 +346,7 @@ export default function FloodMapPage() {
                       {center.type}
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#333', lineHeight: 1.4, marginTop: 2 }}>
-                      {center.address}
+                      📍 {center.address}
                     </div>
                     <div style={{ fontSize: '0.72rem', color: '#666', fontFamily: 'monospace', marginTop: 6 }}>
                       {center.position.lat.toFixed(4)}, {center.position.lng.toFixed(4)}
@@ -392,19 +357,13 @@ export default function FloodMapPage() {
             ))}
           </MapContainer>
         ) : (
-          <EvacuationMap3D boundary={TRIANGULO_BOUNDARY} evacuationCenters={EVACUATION_CENTERS} route={route} />
+          <EvacuationMap3D boundary={TRIANGULO_BOUNDARY} evacuationCenters={centers} />
         )}
-        {mapView === '2d' && (
-          <MapRecenterButton
-            onClick={() => mapRef.current?.setView(DEFAULT_2D_VIEW.center, DEFAULT_2D_VIEW.zoom)}
-          />
-        )}
-        </ExpandableMapFrame>
       </div>
 
-      <SectionLabel>Evacuation Center Details</SectionLabel>
+      <SectionLabel>📍 Evacuation Center Details</SectionLabel>
       <div className="grid-2">
-        {EVACUATION_CENTERS.map(center => (
+        {centers.map(center => (
           <EvacuationCenterCard key={center.id} center={center} />
         ))}
       </div>

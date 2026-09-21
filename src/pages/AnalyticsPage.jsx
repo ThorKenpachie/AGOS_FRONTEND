@@ -273,27 +273,23 @@ export default function AnalyticsPage() {
   // Real per-algorithm cards, built straight from /api/forecast-flood/compare
   // (per_model[key].meta.model_reliability + per_model[key].forecast[0]).
   // No hardcoded accuracy numbers or client-side probability offsets.
-const algorithmCards = modelOptions.map((opt) => {
-  const modelData = perModel[opt.key];
-  const reliability = modelData?.meta?.model_reliability;
-  const day1Prob = modelData?.forecast?.[0]?.flood_probability;
+  const algorithmCards = modelOptions.map((opt) => {
+    const modelData = perModel[opt.key];
+    const reliability = modelData?.meta?.model_reliability;
+    const day1Prob = modelData?.forecast?.[0]?.flood_probability;
 
-  return {
-    ...opt,
-    isLoaded: !!modelData,
-    isSelected: opt.key === modelKey,
-
-    avgAccuracy: reliability?.avg_accuracy,
-    avgPrecision: reliability?.avg_precision,
-    avgRecall: reliability?.avg_recall,
-    avgF1: reliability?.avg_f1,
-    avgFalseAlarm: reliability?.avg_false_alarm_rate,
-    avgMissedEvent: reliability?.avg_missed_event_rate,
-
-    day1ProbPct: day1Prob != null ? Math.round(day1Prob * 100) : null,
-    measuredOn: reliability?.measured_on,
-  };
-});
+    return {
+      ...opt,
+      isLoaded: !!modelData,
+      isSelected: opt.key === modelKey,
+      avgPrecision: reliability?.avg_precision,
+      avgRecall: reliability?.avg_recall,
+      avgF1: reliability?.avg_f1,
+      avgFalseAlarm: reliability?.avg_false_alarm_rate,
+      day1ProbPct: day1Prob != null ? Math.round(day1Prob * 100) : null,
+      measuredOn: reliability?.measured_on,
+    };
+  });
 
   return (
     <div className="fade-in">
@@ -379,7 +375,7 @@ const algorithmCards = modelOptions.map((opt) => {
           Topbar switcher uses). */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div className="card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-          <span>Multi-Algorithm Comparison</span>
+          <span>🧠 Multi-Algorithm Comparison</span>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 'normal', textTransform: 'none', letterSpacing: 0 }}>
             {loadingCompare ? 'Loading live comparison…' : 'Live reliability & day-1 probability, same input windows'}
           </span>
@@ -408,10 +404,6 @@ const algorithmCards = modelOptions.map((opt) => {
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: algo.isSelected ? algo.color : 'var(--text-primary)', marginBottom: '16px' }}>{algo.fullLabel}</div>
               <div style={{ display: 'flex', gap: '20px', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '12px', flexWrap: 'wrap' }}>
                 <div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Accuracy</div>
-                  <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 600 }}>{pct(algo.avgAccuracy)}</div>
-                </div>
-                <div>
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Avg Precision</div>
                   <div style={{ fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: 600 }}>{pct(algo.avgPrecision)}</div>
                 </div>
@@ -426,10 +418,6 @@ const algorithmCards = modelOptions.map((opt) => {
                 <div>
                   <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }} title="Lower is better — how often this model cries wolf">Avg False Alarm</div>
                   <div style={{ fontSize: '0.9rem', color: '#f97316', fontWeight: 600 }}>{pct(algo.avgFalseAlarm)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }} title="Lower is better — share of actual floods this model failed to flag">Missed Event</div>
-                  <div style={{ fontSize: '0.9rem', color: '#f97316', fontWeight: 600 }}>{pct(algo.avgMissedEvent)}</div>
                 </div>
               </div>
               <div>
@@ -450,8 +438,8 @@ const algorithmCards = modelOptions.map((opt) => {
         {!loadingCompare && comparisonDays.length > 0 && (
           <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--blue-border)', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
             {comparisonDays[0].models_agree
-              ? 'All algorithms agree on tomorrow\u2019s alert level.'
-              : 'Algorithms disagree on tomorrow\u2019s alert level — spread of '
+              ? '✅ All algorithms agree on tomorrow\u2019s alert level.'
+              : '⚠️ Algorithms disagree on tomorrow\u2019s alert level — spread of '
                 + `${Math.round(comparisonDays[0].spread * 100)} percentage points. Ensemble mean: `
                 + `${Math.round(comparisonDays[0].ensemble_mean_probability * 100)}% (${comparisonDays[0].ensemble_alert_level}).`}
           </div>

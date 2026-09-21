@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Spinner } from 'react-bootstrap';
 import { useAuth } from '../hooks/useAuth';
-import agosLogo from "../assets/agos-logo.png";
 import { FaEyeSlash, FaEye, FaUser, FaLock } from "react-icons/fa";
 
 const styles = `
@@ -106,15 +105,13 @@ const styles = `
   .agos-logo-inner {
     position: absolute;
     inset: 10px;
+    background: linear-gradient(135deg, #0284c7, #0ea5e9);
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .agos-logo-inner img {
-    width: 100%; height: 100%;
-    object-fit: contain;
-    filter: drop-shadow(0 4px 14px rgba(14,165,233,0.45));
+    font-size: 1.6rem;
+    box-shadow: 0 0 24px rgba(14,165,233,0.4), inset 0 1px 0 rgba(255,255,255,0.15);
   }
 
   .agos-title {
@@ -392,7 +389,7 @@ export default function LoginPage() {
                   </linearGradient>
                 </defs>
               </svg>
-              <div className="agos-logo-inner"><img src={agosLogo} alt="AGOS logo" /></div>
+              <div className="agos-logo-inner">🌊</div>
             </div>
 
             <h1 className="agos-title">AGOS</h1>
@@ -445,7 +442,7 @@ export default function LoginPage() {
 
               {error && (
                 <div className="agos-error">
-                  <span></span> {error}
+                  <span>⚠️</span> {error}
                 </div>
               )}
 
@@ -453,15 +450,24 @@ export default function LoginPage() {
                 {loading ? (
                   <>
                     <Spinner as="span" animation="grow" size="sm" role="status" aria-hidden="true" />
-                    Signing In...
+                    Authenticating...
                   </>
                 ) : (
-                  <>Sign In</>
+                  <>🔐 Sign In</>
                 )}
               </button>
             </form>
+
+            <p style={{ textAlign: 'center', marginTop: 20, fontSize: '0.82rem', color: 'rgba(148,195,240,0.6)' }}>
+              Resident of Barangay Triangulo?{' '}
+              <Link to="/signup" style={{ color: '#38bdf8' }}>Create an account</Link>
+            </p>
           </div>
 
+          <p className="agos-footer">
+            AGOS v1.0 <span className="agos-divider">·</span> Capstone Prototype
+            <span className="agos-divider">·</span> Data from PAGASA / DOST-ASTI
+          </p>
         </div>
       </div>
     </>

@@ -3,13 +3,6 @@ import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../lib/maplibreSetup';
 import trianguloRoads from '../data/trianguloRoads.json';
-import trianguloFloodHazard from '../data/trianguloFloodHazard.json';
-import { CRITICAL_FACILITIES, FACILITY_STYLE, facilityIconSvgMarkup } from '../data/criticalFacilities';
-import RainOverlay from './RainOverlay';
-import RainDebugControls from './RainDebugControls';
-import MinuteForecastStrip from './MinuteForecastStrip';
-import WindDirectionArrow, { degToCardinal } from './WindDirectionArrow';
-import { MapRecenterButton } from './ui';
 
 // Road class -> line weight, matching the 2D FloodMap's ROAD_WEIGHT so the
 // two views read consistently (trunk/primary thicker, service thinner).
@@ -21,20 +14,6 @@ const ROAD_WEIGHT = {
 
 const BOUNDARY_COLOR = '#38bdf8';
 const WATER_COLOR = '#1e88e5';
-
-// Shared between the initial map setup and the recenter button, so the two
-// can never drift apart.
-const DEFAULT_VIEW = { center: [123.1905, 13.618], zoom: 16.2, pitch: 55, bearing: -17 };
-
-// 25-yr rainfall return period hazard zones, clipped to the barangay
-// boundary. Extruded a little per class (not real depth data -- just a
-// legibility cue) so Low/Medium/High read distinctly at a glance in 3D.
-const HAZARD_HEIGHT = ['match', ['get', 'hazard_class'], 1, 1.5, 2, 3, 3, 4.5, 1.5];
-const HAZARD_LEGEND = [
-  { level: 'Low', color: '#3b82f6' },
-  { level: 'Medium', color: '#f59e0b' },
-  { level: 'High', color: '#ef4444' },
-];
 
 // Uniform across the whole boundary (not per-street/per-building) -- same
 // as every other severity cue in this app: it's an intensity signal from
@@ -129,63 +108,12 @@ function roadWidthExpression() {
   return expr;
 }
 
-// Plain DOM element for a maplibregl.Marker -- these live outside the
-// style/source/layer system entirely, so (unlike everything in
-// addDataLayers) they survive a setStyle() basemap switch without needing
-// to be re-added. Just the flat icon glyph, no circle/box behind it.
-function createFacilityMarkerEl(facility) {
-  const style = FACILITY_STYLE[facility.facilityType];
-  const el = document.createElement('div');
-  el.style.display = 'flex';
-  el.style.alignItems = 'center';
-  el.style.justifyContent = 'center';
-  el.style.cursor = 'pointer';
-  el.innerHTML = facilityIconSvgMarkup(facility.facilityType, { size: 24, color: style.color });
-  return el;
-}
-
-export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfallMm, windSignal, windDirectionDeg, condition, minutely, focusRequest, showFacilities, setShowFacilities }) {
+export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfallMm, windSignal }) {
   const containerRef = useRef(null);
   const mapRef = useRef(null);
   const [styleKey, setStyleKey] = useState('liberty');
-  const [rainDebugPreset, setRainDebugPreset] = useState(null); // dev-only override, see RainDebugControls
-  const [showHazard, setShowHazard] = useState(true);
-  const facilityMarkersRef = useRef([]);
   const currentAlertRef = useRef(currentAlert);
   currentAlertRef.current = currentAlert;
-  const showHazardRef = useRef(showHazard);
-  showHazardRef.current = showHazard;
-  const showFacilitiesRef = useRef(showFacilities);
-  showFacilitiesRef.current = showFacilities;
-
-  // Critical-facility markers (hospitals/schools) -- plain maplibregl.Marker
-  // DOM overlays, not style layers, so they're created once on load rather
-  // than inside addDataLayers (which re-runs on every basemap switch and
-  // would otherwise duplicate them).
-  const addFacilityMarkers = (map) => {
-    if (facilityMarkersRef.current.length > 0) return;
-    facilityMarkersRef.current = CRITICAL_FACILITIES.map(facility => {
-      const el = createFacilityMarkerEl(facility);
-      const style = FACILITY_STYLE[facility.facilityType];
-      const popup = new maplibregl.Popup({ offset: 16, closeButton: false }).setHTML(`
-        <div style="min-width:160px; padding:2px;">
-          <div style="font-weight:700; font-size:0.85rem; margin-bottom:4px;">${facility.name}</div>
-          <div style="display:inline-block; font-size:0.6rem; font-weight:700; text-transform:uppercase;
-                      letter-spacing:0.04em; color:${style.color}; background:${style.color}18;
-                      border:1px solid ${style.color}40; border-radius:4px; padding:2px 6px;">
-            ${style.label}
-          </div>
-        </div>
-      `);
-      const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
-        .setLngLat([facility.position.lng, facility.position.lat])
-        .setPopup(popup)
-        .addTo(map);
-      marker._facilityId = facility.id; // plain JS property, for lookup on focus-request below
-      el.style.display = showFacilitiesRef.current ? 'flex' : 'none';
-      return marker;
-    });
-  };
 
   // Adds/re-adds all custom sources and layers. Called on first load AND
   // after every setStyle() call, since switching styles wipes any custom
@@ -229,28 +157,6 @@ export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfa
           'fill-extrusion-height': water.height,
           'fill-extrusion-base': 0,
           'fill-extrusion-opacity': water.opacity,
-        },
-      });
-    }
-
-    // 25-yr flood hazard overlay -- own toggle, independent of the live
-    // alert-driven water slab above. Added after the water slab / before
-    // the boundary outline so the dashed boundary still renders crisply
-    // on top of it.
-    if (!map.getSource('triangulo-flood-hazard')) {
-      map.addSource('triangulo-flood-hazard', { type: 'geojson', data: trianguloFloodHazard });
-    }
-    if (!map.getLayer('triangulo-flood-hazard-fill')) {
-      map.addLayer({
-        id: 'triangulo-flood-hazard-fill',
-        type: 'fill-extrusion',
-        source: 'triangulo-flood-hazard',
-        layout: { visibility: showHazardRef.current ? 'visible' : 'none' },
-        paint: {
-          'fill-extrusion-color': ['get', 'color'],
-          'fill-extrusion-height': HAZARD_HEIGHT,
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.55,
         },
       });
     }
@@ -319,10 +225,10 @@ export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfa
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: STYLE_URLS.liberty,
-      center: DEFAULT_VIEW.center,
-      zoom: DEFAULT_VIEW.zoom,
-      pitch: DEFAULT_VIEW.pitch,
-      bearing: DEFAULT_VIEW.bearing,
+      center: [123.1905, 13.618],
+      zoom: 16.2,
+      pitch: 55,
+      bearing: -17,
       antialias: true,
     });
     mapRef.current = map;
@@ -332,14 +238,7 @@ export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfa
     map.on('load', () => {
       addDataLayers(map);
       applyTimeOfDay(map);
-      addFacilityMarkers(map);
     });
-
-    // Keeps the canvas correctly sized whenever the container's box
-    // changes -- e.g. when it's expanded to fullscreen and back -- not
-    // just on window resize.
-    const resizeObserver = new ResizeObserver(() => map.resize());
-    resizeObserver.observe(containerRef.current);
 
     // Re-lights every 5 minutes so a long-running demo still drifts with
     // the real clock instead of freezing at whatever time the page opened.
@@ -349,41 +248,10 @@ export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfa
 
     return () => {
       clearInterval(lightTimer);
-      resizeObserver.disconnect();
-      facilityMarkersRef.current.forEach(marker => marker.remove());
-      facilityMarkersRef.current = [];
       map.remove();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Toggle critical-facility marker visibility. Markers are plain DOM
-  // overlays (not a style layer), so this just flips each element's
-  // display rather than touching map state.
-  useEffect(() => {
-    facilityMarkersRef.current.forEach(marker => {
-      marker.getElement().style.display = showFacilities ? 'flex' : 'none';
-    });
-  }, [showFacilities]);
-
-  // Fly to + pop open a facility marker when a Critical Facilities card is
-  // clicked (focusRequest set by the Dashboard). ts in focusRequest makes
-  // re-clicking the same facility retrigger this even though the id repeats.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!focusRequest || !map) return;
-    const facility = CRITICAL_FACILITIES.find(f => f.id === focusRequest.id);
-    if (!facility) return;
-    setShowFacilities(true);
-    const flyAndPop = () => {
-      map.flyTo({ center: [facility.position.lng, facility.position.lat], zoom: 18, pitch: 55, duration: 1200 });
-      const marker = facilityMarkersRef.current.find(m => m._facilityId === facility.id);
-      const popup = marker?.getPopup();
-      if (popup && !popup.isOpen()) marker.togglePopup();
-    };
-    if (map.isStyleLoaded()) flyAndPop();
-    else map.once('load', flyAndPop);
-  }, [focusRequest]);
 
   // Keep road color AND water slab height/opacity in sync with alert level.
   useEffect(() => {
@@ -404,20 +272,6 @@ export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfa
     else map.once('load', applyAlertState);
   }, [currentAlert, alertColors]);
 
-  // Toggle the flood hazard overlay's visibility without touching any
-  // other layer.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const applyHazardVisibility = () => {
-      if (map.getLayer('triangulo-flood-hazard-fill')) {
-        map.setLayoutProperty('triangulo-flood-hazard-fill', 'visibility', showHazard ? 'visible' : 'none');
-      }
-    };
-    if (map.isStyleLoaded()) applyHazardVisibility();
-    else map.once('load', applyHazardVisibility);
-  }, [showHazard]);
-
   // Handle basemap style switching -- setStyle() wipes custom layers, so
   // they're re-added (and re-lit) once the new style finishes loading.
   const handleStyleChange = (key) => {
@@ -433,37 +287,9 @@ export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfa
 
   const alertColor = alertColors[currentAlert] || alertColors.NORMAL;
 
-  // Dev-only: RainDebugControls can override the live rainfall/condition
-  // props so you can preview every intensity tier on demand. Selecting the
-  // "Live data" preset clears the override (see handleRainDebugSelect).
-  const effectiveRainfallMm = rainDebugPreset ? rainDebugPreset.mm : rainfallMm;
-  const effectiveCondition  = rainDebugPreset ? rainDebugPreset.condition : condition;
-  const handleRainDebugSelect = (preset) => {
-    setRainDebugPreset(preset.mm === null ? null : preset);
-  };
-
-  const handleRecenter = () => {
-    mapRef.current?.flyTo({ ...DEFAULT_VIEW, duration: 800 });
-  };
-
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', width: '100%', height: 420, borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-
-      <MapRecenterButton onClick={handleRecenter} />
-
-      {/* ── Rain overlay ─────────────────────────────────────────────── */}
-      <RainOverlay rainfallMm={effectiveRainfallMm} condition={effectiveCondition} windSignal={windSignal} />
-
-      {/* Dev-only tier preview -- stripped from production builds since
-          import.meta.env.DEV is statically false there and bundlers
-          tree-shake the dead branch. */}
-      {import.meta.env.DEV && (
-        <RainDebugControls
-          activeLabel={rainDebugPreset?.label ?? 'Live data'}
-          onSelect={handleRainDebugSelect}
-        />
-      )}
 
       {/* ── Floating HUD ─────────────────────────────────────────────── */}
       <div style={{
@@ -487,106 +313,19 @@ export default function FloodMap3D({ currentAlert, boundary, alertColors, rainfa
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-            <span style={{ fontSize: '0.65rem', color: '#8da4be' }}>Rainfall</span>
+            <span style={{ fontSize: '0.65rem', color: '#8da4be' }}>🌧 Rainfall</span>
             <span style={{ fontSize: '0.7rem', color: '#e2eaf5', fontWeight: 600 }}>
-              {effectiveRainfallMm != null ? `${effectiveRainfallMm.toFixed(1)} mm/hr` : '—'}
+              {rainfallMm != null ? `${rainfallMm.toFixed(1)} mm/hr` : '—'}
             </span>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-            <span style={{ fontSize: '0.65rem', color: '#8da4be' }}>Wind Signal</span>
+            <span style={{ fontSize: '0.65rem', color: '#8da4be' }}>🌀 Wind Signal</span>
             <span style={{ fontSize: '0.7rem', color: '#e2eaf5', fontWeight: 600 }}>
               {windSignal != null ? `#${windSignal}` : '—'}
             </span>
           </div>
-          {windDirectionDeg != null && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <span style={{ fontSize: '0.65rem', color: '#8da4be' }}>Wind Dir</span>
-              <span style={{ fontSize: '0.7rem', color: '#e2eaf5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <WindDirectionArrow deg={windDirectionDeg} size={13} />
-                {degToCardinal(windDirectionDeg)} · {Math.round(windDirectionDeg)}°
-              </span>
-            </div>
-          )}
-          {effectiveCondition && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <span style={{ fontSize: '0.65rem', color: '#8da4be' }}>Condition</span>
-              <span style={{ fontSize: '0.7rem', color: '#e2eaf5', fontWeight: 600 }}>
-                {effectiveCondition}
-              </span>
-            </div>
-          )}
-          <div
-            title="25-yr rainfall return period flood hazard"
-            style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              gap: 12, marginTop: 2, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            <span style={{ fontSize: '0.65rem', color: '#8da4be' }}>Hazard</span>
-            <button
-              onClick={() => setShowHazard(v => !v)}
-              style={{
-                width: 26, height: 14, borderRadius: 7, flexShrink: 0,
-                background: showHazard ? 'var(--accent, #0ea5e9)' : 'rgba(255,255,255,0.18)',
-                position: 'relative', border: 'none', cursor: 'pointer', padding: 0,
-                transition: 'background 0.2s',
-              }}
-            >
-              <div style={{
-                width: 10, height: 10, borderRadius: '50%', background: '#fff',
-                position: 'absolute', top: 2, left: showHazard ? 14 : 2, transition: 'left 0.2s',
-              }} />
-            </button>
-          </div>
-          {showHazard && (
-            <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
-              {HAZARD_LEGEND.map(({ level, color }) => (
-                <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: 2, background: color, flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.58rem', color: '#8da4be' }}>{level}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div
-            title="Hospitals and schools -- exposure layer"
-            style={{
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              gap: 12, marginTop: 2, paddingTop: 6, borderTop: '1px solid rgba(255,255,255,0.08)',
-            }}
-          >
-            <span style={{ fontSize: '0.65rem', color: '#8da4be' }}>Facilities</span>
-            <button
-              onClick={() => setShowFacilities(v => !v)}
-              style={{
-                width: 26, height: 14, borderRadius: 7, flexShrink: 0,
-                background: showFacilities ? 'var(--accent, #0ea5e9)' : 'rgba(255,255,255,0.18)',
-                position: 'relative', border: 'none', cursor: 'pointer', padding: 0,
-                transition: 'background 0.2s',
-              }}
-            >
-              <div style={{
-                width: 10, height: 10, borderRadius: '50%', background: '#fff',
-                position: 'absolute', top: 2, left: showFacilities ? 14 : 2, transition: 'left 0.2s',
-              }} />
-            </button>
-          </div>
-          {showFacilities && (
-            <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
-              {Object.values(FACILITY_STYLE).map(({ label, color }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.58rem', color: '#8da4be' }}>{label}</span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
-
-      {/* ── Minute forecast (precipitation) ─────────────────────────────── */}
-      <MinuteForecastStrip minutely={minutely} />
 
       {/* ── Basemap style switcher ──────────────────────────────────────── */}
       <div style={{

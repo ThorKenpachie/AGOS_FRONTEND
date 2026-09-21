@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -13,44 +13,31 @@
   --accent2:        #0ea5e9;
   --text-primary:   #e2eaf5;
   --text-secondary: #8da4be;
-  --text-muted:     #7c93b8;
+  --text-muted:     #4a6080;
   --green:          #22c55e;
   --yellow:         #eab308;
   --orange:         #f97316;
   --red:            #ef4444;
-  /* Plus Jakarta Sans carries the same instrument-panel personality as the
-     auth screens into headlines, numerals and card titles; Inter stays for
-     everything read at length (body copy, table cells, form fields). */
-  --font-display:   'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-body:      'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --radius:         12px;
   --radius-sm:      8px;
   --shadow:         0 4px 24px rgba(0,0,0,0.3);
 }
 
-/* ── LIGHT MODE ──
-   Same hue family as dark mode (~210°) kept strictly monochromatic so the
-   two themes read as one system, just re-lit. The old canvas (#c2d5ec)
-   sat around 45% saturation, which is too vivid for a large flat field —
-   it fought with the white cards instead of setting them off. Desaturating
-   the canvas and stepping lightness gradually (deep → mid → panel → card)
-   gives a calmer backdrop while keeping enough separation to read as
-   layers, not a flat wash. Borders and shadows are pulled back to match,
-   and the warm advisory/alert colors (yellow/orange/red) are left as-is —
-   they sit near blue's complement on the wheel, so they already pop
-   without needing to be louder. */
+/* ── LIGHT MODE ── */
 :root.light {
-  --blue-deep:      #dbe6f4;   /* soft, low-saturation canvas — sets cards apart without competing */
-  --blue-mid:       #eef3fa;   /* nested panels, one step up from canvas */
-  --blue-panel:     #f4f8fc;   /* topbar chrome, closer to white */
-  --blue-card:      #ffffff;   /* crisp white so cards still pop off the canvas */
-  --blue-border:    #bccfe6;   /* softened — present but no longer a hard outline */
+  --blue-deep:      #c2d5ec;   /* richer blue canvas — no longer washed out */
+  --blue-mid:       #e9f0fa;   /* subtle nested panels inside cards */
+  --blue-panel:     #eef3fb;   /* topbar chrome */
+  --blue-card:      #ffffff;   /* crisp white so cards pop off the blue canvas */
+  --blue-border:    #93b0d6;   /* stronger, more visible border */
   --accent:         #0284c7;
   --accent2:        #0369a1;
-  --text-primary:   #14283f;   /* softened off-black so long text isn't harsh */
-  --text-secondary: #40597a;
-  --text-muted:     #5c7699;
-  --shadow:         0 10px 28px rgba(15,45,90,0.12), 0 2px 6px rgba(15,45,90,0.06);
+  --text-primary:   #0c1e35;
+  --text-secondary: #2d4a6a;
+  --text-muted:     #5a7a9a;
+  --shadow:         0 14px 32px rgba(15,45,90,0.20), 0 2px 8px rgba(15,45,90,0.10);
 }
 
 /* Sidebar stays a deep navy blue in light mode for contrast against the lighter canvas */
@@ -63,14 +50,13 @@
   --accent:         #5ec8fa;
 }
 
-html { font-size: 16px; overflow-x: hidden; }
+html { font-size: 16px; }
 
 body {
   font-family: var(--font-body);
   background: var(--blue-deep);
   color: var(--text-primary);
   min-height: 100vh;
-  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -110,114 +96,6 @@ body {
 
 .fade-in { animation: fade-in 0.4s ease forwards; }
 .slide-in { animation: slide-in 0.3s ease forwards; }
-
-/* Skeleton loading placeholders — shimmer sweeps left to right while data
-   is still in flight, instead of a static "Loading..." string. */
-.skeleton {
-  background: linear-gradient(90deg, var(--blue-mid) 25%, var(--blue-border) 37%, var(--blue-mid) 63%);
-  background-size: 400% 100%;
-  animation: shimmer 1.4s ease infinite;
-  border-radius: var(--radius-sm);
-}
-
-/* Tactile press feedback for the small pill-style toggle buttons (2D/3D,
-   hourly/daily, basemap, map layers, etc.) so tapping feels responsive
-   instead of just an instant color swap. */
-.toggle-pill { transition: filter 0.15s ease, transform 0.12s ease, background 0.2s ease, color 0.2s ease; }
-.toggle-pill:hover { filter: brightness(1.15); }
-.toggle-pill:active { transform: scale(0.93); }
-
-/* Chevron rotation for collapsible section headers. */
-.collapse-chevron { display: inline-flex; transition: transform 0.25s ease; }
-.collapse-chevron.open { transform: rotate(180deg); }
-
-.collapse-header {
-  width: 100%; display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; background: var(--title-band); border: none; cursor: pointer;
-  text-align: left; font: inherit; color: inherit; padding: 0;
-}
-.collapse-header:hover .card-title { color: var(--accent2); }
-
-.collapse-body {
-  overflow: hidden;
-  transition: grid-template-rows 0.32s ease;
-  display: grid;
-}
-.collapse-body > div { overflow: hidden; min-height: 0; }
-
-/* Ambient glow around the advisory bulletin when the alert is severe
-   (Warning/Critical) — a slow breathing pulse rather than a hard blink,
-   so it reads as "this needs attention" without being alarming/flashy. */
-@keyframes alert-glow-pulse {
-  0%, 100% { box-shadow: var(--shadow), 0 0 22px var(--glow-a); }
-  50%      { box-shadow: var(--shadow), 0 0 48px var(--glow-b); }
-}
-.alert-glow-pulse { animation: alert-glow-pulse 2.4s ease-in-out infinite; }
-
-
-/* Mobile bottom quick-action bar — the two things a resident needs most
-   in an active flood (report what they see, find the nearest evacuation
-   route) stay one tap away instead of behind the hamburger menu. Hidden
-   on desktop, where the sidebar already covers this. */
-.quick-actions-bar {
-  display: none;
-}
-@media (max-width: 768px) {
-  .quick-actions-bar {
-    display: flex;
-    position: sticky;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 80;
-    gap: 1px;
-    background: var(--blue-border);
-    border-top: 1px solid var(--blue-border);
-    box-shadow: 0 -4px 16px rgba(0,0,0,0.25);
-  }
-  .quick-actions-bar button {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
-    padding: 10px 6px 12px;
-    background: var(--blue-panel);
-    border: none;
-    color: var(--text-secondary);
-    font-size: 0.66rem;
-    font-weight: 700;
-    letter-spacing: 0.01em;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-  }
-  .quick-actions-bar button:active { background: var(--blue-mid); }
-  .quick-actions-bar button.primary { color: var(--accent); }
-  .quick-actions-bar .qa-icon { font-size: 1.15rem; line-height: 1; }
-  /* Leave room so the bar never overlaps page content at the bottom of a scroll. */
-  .page-body { padding-bottom: 8px; }
-}
-
-/* "Still happening?" confirm control on a report popup/card — quiet
-   until pressed, then flips to a filled confirmed state with a short
-   pop so the tap registers as having done something. */
-.confirm-btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em;
-  padding: 4px 10px; border-radius: 999px; cursor: pointer;
-  border: 1px solid var(--blue-border); background: transparent; color: var(--text-secondary);
-  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
-}
-.confirm-btn:hover { border-color: var(--accent); color: var(--accent); }
-.confirm-btn.confirmed {
-  background: rgba(34,197,94,0.14); border-color: #22c55e; color: #22c55e;
-  animation: confirm-pop 0.35s ease;
-}
-@keyframes confirm-pop {
-  0%   { transform: scale(1); }
-  40%  { transform: scale(1.12); }
-  100% { transform: scale(1); }
-}
 
 /* Layout */
 .app-layout {
@@ -262,7 +140,7 @@ body {
 }
 
 :root.light .card:hover {
-  box-shadow: 0 16px 34px rgba(15,45,90,0.15), 0 3px 8px rgba(15,45,90,0.07);
+  box-shadow: 0 18px 40px rgba(15,45,90,0.24), 0 4px 10px rgba(15,45,90,0.12);
   transform: translateY(-2px);
 }
 
@@ -272,161 +150,12 @@ body {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--text-secondary);
   margin-bottom: 16px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
-/* Small uppercase "eyebrow" label used above/inside cards throughout the
-   app (rendered by the shared SectionLabel component, plus the bespoke
-   card-title headers and header-bar kickers that follow the same visual
-   pattern). Both themes get an accent-tinted chip behind the label so each
-   section pops as a distinct, colored heading rather than blending into
-   the card background — dark mode uses a glowing sky-blue tint, light
-   mode a softer, darker-text version of the same accent. */
-.section-label {
-  font-size: 0.65rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin-bottom: 10px;
-  padding: 6px 12px;
-  border-radius: 7px;
-  background: rgba(56, 189, 248, 0.14);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: fit-content;
-}
-
-:root.light .section-label {
-  background: rgba(2, 132, 199, 0.09);
-  color: var(--accent2);
-}
-
-/* Card titles get a full-width colored band across the top of the card,
-   rather than a chip hugging the text — reads like a proper header strip.
-   Only applies when .card-title is a direct child of a default-padded
-   .card (the common case: AnalyticsPage, RainfallPage); card-title
-   instances nested inside their own custom header bar (e.g.
-   CollapsibleSection, the Flood Status Map header) already sit inside a
-   full-width bar, so that wrapper's background is tinted instead — see
-   the --title-band variable below. */
-.card > .card-title {
-  background: rgba(56, 189, 248, 0.12);
-  margin: -20px -20px 16px -20px;
-  padding: 14px 20px;
-  border-radius: var(--radius) var(--radius) 0 0;
-}
-
-:root.light .card > .card-title {
-  background: var(--accent2);
-  color: #fff;
-}
-
-/* Used by bespoke header-bar wrappers (title rows built with inline
-   styles rather than the .card-title class) so they pick up the same
-   accent tint instead of the neutral --blue-mid panel color, in both
-   themes. Light mode uses a literal hex (not var(--accent2)) so this
-   value can't be affected by the local --accent2 overrides elsewhere. */
-:root { --title-band: rgba(56, 189, 248, 0.12); }
-:root.light { --title-band: #0369a1; }
-
-/* Light mode: card titles are a solid, fully-colored band rather than a
-   faint tint (dark mode keeps the translucent glow — it already reads
-   clearly against the dark card background). Add the same class to any
-   bespoke header-bar wrapper that sets `background: var(--title-band)`
-   inline (CollapsibleSection's .collapse-header already qualifies).
-   Redefining --accent/--text-secondary/--text-muted locally means every
-   label inside the bar (including ones set via inline style) picks up a
-   readable light color automatically, without editing each one by hand. */
-:root.light .title-band-bar,
-:root.light .collapse-header {
-  --accent: #ffffff;
-  --text-secondary: rgba(255, 255, 255, 0.92);
-  --text-muted: rgba(255, 255, 255, 0.82);
-}
-:root.light .collapse-header:hover .card-title { color: #fff; opacity: 0.85; }
-
-/* The 2D/3D map-view toggle (and similar bare-background controls) keeps
-   its own light --blue-mid pill background no matter which header it
-   sits in, so the title-band text-color overrides above would make its
-   label invisible (white-on-white). Reset those variables back to their
-   normal light-theme values for this control specifically. */
-:root.light .title-band-bar .view-toggle-group {
-  --accent: #0284c7;
-  --text-muted: #5c7699;
-}
-
-
-/* Hero masthead — the dashboard's primary banner (brand, location, live
-   sync status). Previously this info sat in a plain bottom-bordered row
-   with no real container; it's now its own gradient panel so the page
-   opens with a clear focal point instead of starting flat. The contour
-   pattern from the old page-level decorative wash now lives inside this
-   component instead of floating behind unrelated content below it. */
-.hero-masthead {
-  position: relative;
-  overflow: hidden;
-  border-radius: 18px;
-  border: 1px solid var(--blue-border);
-  background: linear-gradient(135deg, var(--blue-panel) 0%, var(--blue-mid) 100%);
-  padding: 28px 28px 22px;
-  margin-bottom: 18px;
-  box-shadow: var(--shadow);
-}
-.hero-masthead-pattern {
-  position: absolute; inset: 0; pointer-events: none; z-index: 0;
-}
-.hero-masthead-row {
-  position: relative; z-index: 1;
-  display: flex; align-items: flex-start; justify-content: space-between;
-  flex-wrap: wrap; gap: 20px;
-}
-.hero-brand { display: flex; align-items: flex-start; gap: 16px; }
-.hero-eyebrow {
-  font-size: 0.68rem; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase;
-  color: var(--accent); margin-bottom: 5px;
-}
-.hero-title {
-  font-family: var(--font-display); font-weight: 800; letter-spacing: -0.015em;
-  color: var(--text-primary); margin: 0 0 5px; font-size: clamp(1.35rem, 2.6vw, 1.9rem);
-  line-height: 1.15;
-}
-.hero-location { font-size: 0.82rem; color: var(--text-secondary); font-weight: 600; }
-.hero-coords { color: var(--text-muted); font-family: monospace; font-weight: 400; }
-.hero-status-col { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
-.hero-status-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.hero-synced { font-size: 0.68rem; color: var(--text-muted); text-align: right; }
-
-@media (max-width: 640px) {
-  .hero-masthead { padding: 22px 18px 18px; }
-  .hero-status-col { align-items: flex-start; }
-  .hero-status-row { justify-content: flex-start; }
-  .hero-synced { text-align: left; }
-}
-
-/* Stat card -- used by the dashboard's KPI strip (Conditions Strip). Each
-   cell gets a colored top edge and a faint tint of its own metric color
-   instead of a flat divider, so the strip reads as a row of instruments
-   rather than a plain table. */
-.stat-cell {
-  position: relative;
-  transition: background 0.2s ease;
-}
-.stat-cell::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: var(--stat-color, transparent);
-  opacity: 0.7;
-}
-.stat-cell:hover { background: rgba(255,255,255,0.015); }
-:root.light .stat-cell:hover { background: rgba(15,45,90,0.025); }
 
 /* Buttons */
 .btn {
@@ -460,41 +189,27 @@ body {
   border: 1px solid var(--blue-border);
 }
 .btn-ghost:hover { background: var(--blue-border); color: var(--text-primary); }
-.btn:active { transform: scale(0.97); }
 
 /* Theme toggle button */
 .theme-toggle {
-  width: 44px;
-  height: 24px;
-  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
   border: 1px solid var(--blue-border);
   background: var(--blue-card);
+  color: var(--text-secondary);
   cursor: pointer;
   display: flex;
   align-items: center;
-  padding: 2px;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  justify-content: center;
+  font-size: 1rem;
+  transition: all 0.2s ease;
   flex-shrink: 0;
 }
 .theme-toggle:hover {
-  border-color: var(--accent);
-}
-.theme-toggle[aria-checked="true"] {
-  background: linear-gradient(135deg, var(--accent2), var(--accent));
-  border-color: transparent;
-}
-.theme-toggle-knob {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
-  transition: transform 0.2s ease;
-  transform: translateX(0);
-}
-.theme-toggle[aria-checked="true"] .theme-toggle-knob {
-  transform: translateX(20px);
-  background: #fff;
+  background: var(--blue-border);
+  color: var(--text-primary);
+  transform: rotate(20deg);
 }
 
 /* Badge */
@@ -525,13 +240,26 @@ body {
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 
+/* Every grid item below defaults to `min-width: auto`, i.e. it won't shrink
+   past its content's min-content size — so a wide child (typically a
+   horizontally-scrolling row like .weather-hourly-row) silently forces its
+   whole grid cell, and the page, wider than the viewport instead of
+   scrolling inside its own `overflow-x: auto`. Resetting the min-width to 0
+   on every grid item lets the track actually respect the column size so
+   the intended internal scroll containers do their job. */
+.grid-2 > *, .grid-3 > *, .grid-4 > *,
+.weather-hero-grid > *,
+[style*="grid-template-columns"] > * {
+  min-width: 0;
+}
+
 /* Weather forecast widget */
-.weather-day-tabs { display: flex; gap: 8px; overflow-x: scroll; padding-bottom: 8px; scrollbar-width: thin; scrollbar-color: var(--blue-border) var(--blue-mid); }
-.weather-hero-grid { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: stretch; }
+.weather-day-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+.weather-hero-grid { display: grid; grid-template-columns: 320px 1fr; gap: 16px; align-items: stretch; }
 .weather-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; }
-.weather-hourly-row { display: flex; gap: 6px; overflow-x: scroll; padding-bottom: 8px; scrollbar-width: thin; scrollbar-color: var(--blue-border) var(--blue-mid); }
+.weather-hourly-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
 @media (max-width: 900px) {
-  .weather-hero-grid { grid-template-columns: minmax(0, 1fr); }
+  .weather-hero-grid { grid-template-columns: 1fr; }
 }
 
 /* Topbar */
@@ -555,46 +283,37 @@ body {
 .level-critical { color: var(--red); }
 
 /* Responsive */
-
-/* Tablet: sidebar and card padding stay as desktop, but ease the KPI/stat
-   grids down from 3-4 columns to 2 before they get cramped, rather than
-   jumping straight to a single column only at the phone breakpoint. */
-@media (max-width: 1024px) {
-  .grid-3, .grid-4 { grid-template-columns: repeat(2, 1fr); }
-
-  /* Sidebar turns into a slide-out drawer. visibility keeps its links out of
-     the Tab order while it's closed. */
-  .sidebar {
-    transform: translateX(-100%);
-    visibility: hidden;
-    width: 272px;
-    max-width: 86vw;
-    transition: transform 0.28s ease, visibility 0s linear 0.28s;
-  }
-  .sidebar.open {
-    transform: translateX(0);
-    visibility: visible;
-    transition-delay: 0s;
-    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
-  }
-  .main-content { margin-left: 0; }
-  .hide-tablet { display: none !important; }
-}
-
 @media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); width: 220px; }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
   .page-body { padding: 16px; }
   .hide-mobile { display: none !important; }
-  .topbar { padding: 10px 14px; gap: 10px; }
-  .topbar-sub { display: none; }
+
+  /* Most page content uses ad-hoc inline `display:grid; gridTemplateColumns`
+     layouts (multi-column report forms, stat rows, chart+sidebar splits)
+     rather than the .grid-2/3/4 helpers above, so they don't pick up the
+     rule right above this comment. Force every such grid down to a single
+     column on phones/small tablets so nothing gets clipped or forced into
+     tiny squeezed columns. Compact list-item rows (icon + label + value,
+     badge + chevron, etc.) that read fine — and look better — staying on
+     one row are opted out via the `row-grid` class rather than left to
+     stack awkwardly. `!important` is required here because inline styles
+     otherwise always win over a stylesheet rule. */
+  [style*="grid-template-columns"]:not(.row-grid) {
+    grid-template-columns: 1fr !important;
+  }
+
+  .topbar { padding: 10px 14px; flex-wrap: wrap; gap: 8px; row-gap: 8px; }
+  .page-body { overflow-x: hidden; }
 }
 
-/* Small phones — trim padding further and let anything still using the
-   grid helpers or card padding breathe on a ~360px-wide viewport. */
-@media (max-width: 400px) {
+@media (max-width: 480px) {
+  html { font-size: 15px; }
   .page-body { padding: 12px; }
-  .card { padding: 16px; }
-  .card > .card-title { margin: -16px -16px 14px -16px; padding: 12px 16px; }
+  .card { padding: 14px; }
+  .topbar h1 { font-size: 0.95rem !important; }
 }
 
 .form-control::placeholder {
@@ -605,337 +324,3 @@ body {
 .form-control {
   color: var(--text-primary) !important;
 }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   ACCESSIBILITY
-   Toggled from Settings via classes on <html> (see hooks/useAccessibility).
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* Skip link: first Tab stop on every page, visible only when focused. */
-.skip-link {
-  position: absolute; left: 8px; top: -60px; z-index: 10000;
-  padding: 10px 16px; border-radius: var(--radius-sm);
-  background: var(--accent2); color: #fff; font-weight: 700; text-decoration: none;
-  transition: top 0.15s ease;
-}
-.skip-link:focus { top: 8px; }
-#main-content:focus { outline: none; }
-
-/* Baseline keyboard focus ring for everyone (the app had none of its own). */
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* Strong focus */
-:root.a11y-focus :focus-visible {
-  outline: 4px solid #facc15;
-  outline-offset: 3px;
-  box-shadow: 0 0 0 2px #000;
-}
-
-/* High contrast */
-:root.a11y-contrast {
-  --text-primary:   #ffffff;
-  --text-secondary: #e8eff9;
-  --text-muted:     #cddaeb;
-  --blue-border:    #86adde;
-  --accent:         #7dd3fc;
-  --accent2:        #38bdf8;
-}
-:root.light.a11y-contrast {
-  --text-primary:   #000000;
-  --text-secondary: #0d1c2f;
-  --text-muted:     #1d3350;
-  --blue-border:    #2d4c78;
-  --accent:         #00568f;
-  --accent2:        #003f6b;
-}
-:root.a11y-contrast .card { border-width: 2px; }
-
-/* Reduce motion (CSS-driven animation; JS effects check the setting too) */
-:root.a11y-reduce-motion *,
-:root.a11y-reduce-motion *::before,
-:root.a11y-reduce-motion *::after {
-  animation-duration: 0.001ms !important;
-  animation-iteration-count: 1 !important;
-  transition-duration: 0.001ms !important;
-  scroll-behavior: auto !important;
-}
-:root.a11y-reduce-motion .card:hover { transform: none; }
-
-/* Easy-to-read font: swap the two font tokens the app already uses. */
-:root.a11y-readable {
-  --font-body:    'Atkinson Hyperlegible', Verdana, 'Segoe UI', sans-serif;
-  --font-display: 'Atkinson Hyperlegible', Verdana, 'Segoe UI', sans-serif;
-}
-
-/* Extra text spacing (WCAG 1.4.12 values) */
-:root.a11y-spacing body {
-  line-height: 1.7;
-  letter-spacing: 0.04em;
-  word-spacing: 0.12em;
-}
-:root.a11y-spacing p { margin-bottom: 1.5em; }
-
-/* Underline links */
-:root.a11y-underline a:not(.btn):not(.skip-link) {
-  text-decoration: underline !important;
-  text-underline-offset: 3px;
-}
-
-/* Larger tap targets */
-:root.a11y-targets button,
-:root.a11y-targets .btn,
-:root.a11y-targets select,
-:root.a11y-targets input:not([type="checkbox"]):not([type="radio"]),
-:root.a11y-targets .sidebar-link,
-:root.a11y-targets .settings-seg {
-  min-height: 44px;
-}
-:root.a11y-targets button,
-:root.a11y-targets .btn { min-width: 44px; }
-:root.a11y-targets .theme-toggle { min-height: 0; min-width: 0; height: 32px; width: 58px; }
-:root.a11y-targets .theme-toggle-knob { width: 26px; height: 26px; }
-:root.a11y-targets .theme-toggle[aria-checked="true"] .theme-toggle-knob { transform: translateX(26px); }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   SETTINGS PAGE
-   ═══════════════════════════════════════════════════════════════════════════ */
-.settings-grid { display: grid; gap: 18px; max-width: 860px; }
-.settings-section:hover { transform: none !important; }
-
-.settings-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 20px;
-  padding: 14px 0; border-top: 1px solid var(--blue-border);
-}
-.settings-row:first-of-type { border-top: none; }
-.settings-row-text { min-width: 0; flex: 1 1 auto; }
-.settings-label {
-  display: block; font-size: 0.92rem; font-weight: 600;
-  color: var(--text-primary); margin: 0 0 2px;
-}
-.settings-desc { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.45; }
-
-.settings-input {
-  min-width: 160px; padding: 9px 12px; font: inherit; font-size: 0.88rem;
-  color: var(--text-primary); background: var(--blue-mid);
-  border: 1px solid var(--blue-border); border-radius: var(--radius-sm);
-}
-
-.settings-segmented {
-  display: inline-flex; flex-shrink: 0; overflow: hidden;
-  border: 1px solid var(--blue-border); border-radius: var(--radius-sm);
-  background: var(--blue-mid);
-}
-.settings-seg {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 8px 14px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
-  color: var(--text-secondary); user-select: none;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.settings-seg + .settings-seg { border-left: 1px solid var(--blue-border); }
-.settings-seg:hover { color: var(--text-primary); }
-.settings-seg.active { background: var(--accent2); color: #fff; }
-.settings-seg:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
-:root.a11y-focus .settings-seg:focus-within { outline: 4px solid #facc15; }
-
-.settings-account { display: grid; gap: 8px; margin: 0; }
-.settings-account > div { display: flex; gap: 12px; font-size: 0.88rem; }
-.settings-account dt { width: 60px; color: var(--text-muted); font-weight: 600; }
-.settings-account dd { margin: 0; color: var(--text-primary); }
-
-@media (max-width: 640px) {
-  .settings-row { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .settings-segmented { flex-wrap: wrap; }
-}
-.settings-desc a { color: var(--accent); font-weight: 600; }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   RESIDENTS
-   Bootstrap gives table cells its own dark body color (#212529), which is
-   unreadable on the dark card -- so text color is set explicitly here.
-   ═══════════════════════════════════════════════════════════════════════════ */
-.registry-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
-.registry-search { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.registry-search .settings-input { width: 260px; max-width: 100%; }
-.registry-count { font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; }
-.registry-add { text-decoration: none; }
-.registry-notice { font-size: 0.85rem; color: var(--green); margin-bottom: 10px; font-weight: 500; }
-.registry-empty { padding: 40px 0; text-align: center; color: var(--text-secondary); font-size: 0.95rem; }
-.registry-more { margin-top: 12px; text-align: center; }
-
-.registry-table-wrap { padding: 0; overflow-x: auto; color: var(--text-primary); }
-.registry-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; color: var(--text-primary); }
-.registry-table th {
-  text-align: left; padding: 12px 16px; white-space: nowrap;
-  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em;
-  color: var(--text-secondary); background: var(--blue-mid);
-  border-bottom: 1px solid var(--blue-border);
-}
-.registry-table td {
-  padding: 12px 16px; vertical-align: middle;
-  color: var(--text-primary); border-bottom: 1px solid var(--blue-border);
-}
-.registry-table tbody tr:last-child td { border-bottom: none; }
-.registry-table tbody tr:hover td { background: rgba(56, 189, 248, 0.07); }
-.registry-name { font-weight: 600; }
-.registry-sub { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
-.registry-warn { color: var(--yellow); font-weight: 600; }
-:root.light .registry-warn { color: #a16207; }
-.registry-actions { white-space: nowrap; text-align: right; }
-.registry-btn { padding: 6px 14px; font-size: 0.82rem; }
-.registry-btn + .registry-btn { margin-left: 6px; }
-.registry-btn-danger { color: var(--red); }
-:root.light .registry-btn-danger { color: #b91c1c; }
-
-.registry-dialog {
-  margin: auto; padding: 24px; width: min(440px, 92vw);
-  background: var(--blue-card); color: var(--text-primary);
-  border: 1px solid var(--blue-border); border-radius: var(--radius); box-shadow: var(--shadow);
-}
-.registry-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
-.registry-dialog-title { font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; margin-bottom: 16px; }
-.registry-dialog-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
-.registry-field-label { display: block; margin-bottom: 5px; font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
-.registry-field { width: 100%; margin-bottom: 6px; }
-.registry-hint { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 14px; }
-.registry-check { display: flex; gap: 10px; align-items: flex-start; font-size: 0.88rem; color: var(--text-primary); margin-bottom: 14px; line-height: 1.4; }
-.registry-check input { margin-top: 3px; flex-shrink: 0; }
-.registry-error { color: var(--red); font-size: 0.85rem; min-height: 1.2em; margin-bottom: 8px; }
-
-/* ── Pagination (Alert Log) ── */
-.pager { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 18px; }
-.pager-btn {
-  min-width: 40px; height: 40px; padding: 0 14px;
-  font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
-  color: var(--text-primary); background: var(--blue-card);
-  border: 1px solid var(--blue-border); border-radius: var(--radius-sm);
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.pager-btn:hover:not(:disabled):not([aria-current="page"]) { border-color: var(--accent); background: var(--blue-mid); }
-.pager-btn[aria-current="page"] { background: var(--accent2); border-color: var(--accent2); color: #fff; cursor: default; }
-.pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.pager-gap { min-width: 24px; text-align: center; color: var(--text-secondary); }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   SIDEBAR + TOPBAR
-   ═══════════════════════════════════════════════════════════════════════════ */
-.sidebar-overlay {
-  display: none; position: fixed; inset: 0; z-index: 99;
-  background: rgba(0, 0, 0, 0.55);
-  opacity: 0; visibility: hidden; pointer-events: none;
-  transition: opacity 0.25s ease, visibility 0s linear 0.25s;
-}
-.sidebar-overlay.show { opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
-
-.sidebar-brand { display: flex; align-items: center; gap: 12px; padding: 18px 16px 16px; border-bottom: 1px solid var(--blue-border); }
-img.sidebar-brand-mark {
-  width: 40px; height: 40px; flex-shrink: 0; object-fit: contain; display: block;
-}
-.sidebar-brand-text { flex: 1; min-width: 0; }
-.sidebar-brand-name { font-family: var(--font-display); font-weight: 800; font-size: 1.3rem; letter-spacing: -0.02em; line-height: 1.05; color: var(--text-primary); }
-.sidebar-brand-sub { font-size: 0.74rem; color: var(--text-secondary); margin-top: 3px; }
-.sidebar-close {
-  display: none; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
-  background: transparent; border: 1px solid var(--blue-border); color: var(--text-secondary);
-}
-.sidebar-close:hover { color: var(--text-primary); border-color: var(--accent); }
-
-.sidebar-nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 8px 12px 12px; }
-.sidebar-group + .sidebar-group { margin-top: 6px; }
-.sidebar-group-label {
-  padding: 16px 12px 8px; font-size: 0.72rem; font-weight: 700;
-  letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted);
-}
-.sidebar-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
-.sidebar-link {
-  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px;
-  font-size: 0.92rem; font-weight: 500; text-decoration: none; color: var(--text-secondary);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.sidebar-link svg { width: 20px; height: 20px; flex-shrink: 0; }
-.sidebar-link:hover { background: rgba(56, 189, 248, 0.09); color: var(--text-primary); }
-.sidebar-link.active { background: rgba(56, 189, 248, 0.17); color: var(--accent); font-weight: 600; }
-
-.sidebar-account { padding: 14px 16px 16px; border-top: 1px solid var(--blue-border); }
-.sidebar-user { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-.sidebar-avatar {
-  width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 0.95rem; color: var(--accent); background: rgba(56, 189, 248, 0.17);
-}
-.sidebar-user-text { min-width: 0; }
-.sidebar-user-name { font-size: 0.9rem; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sidebar-user-role { font-size: 0.76rem; color: var(--text-secondary); }
-.sidebar-account-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
-
-.mobile-menu-btn {
-  display: none; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 40px; height: 40px; border-radius: 10px; cursor: pointer;
-  background: var(--blue-mid); border: 1px solid var(--blue-border); color: var(--text-primary);
-}
-.mobile-menu-btn:hover { border-color: var(--accent); }
-
-.topbar-left { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1 1 auto; }
-.topbar-titles { min-width: 0; }
-.topbar-titles h1 { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar-sub { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
-
-/* Narrow-screen overrides for the sidebar/topbar rules above. They live here,
-   after the base rules, so the cascade lets them win. */
-@media (max-width: 1024px) {
-  .sidebar-close { display: inline-flex; }
-  .sidebar-overlay { display: block; }
-  .mobile-menu-btn { display: inline-flex; }
-}
-@media (max-width: 768px) {
-  .topbar-controls { flex-wrap: nowrap; gap: 8px; }
-}
-
-/* ── Tab bar (Dashboard) ──
-   Sticks just under the topbar; --tabbar-top is set from the topbar's real
-   height by TabBar.jsx. Solid background so content scrolling under it
-   doesn't show through. */
-.tabbar {
-  position: sticky;
-  top: var(--tabbar-top, 60px);
-  z-index: 40;
-  display: flex;
-  gap: 4px;
-  margin-bottom: 16px;
-  background: var(--blue-deep);
-  border-bottom: 1px solid var(--blue-border);
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.tabbar::-webkit-scrollbar { display: none; }
-.tabbar-tab {
-  flex: 0 0 auto;
-  padding: 13px 18px 11px;
-  margin-bottom: -1px;
-  background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-body);
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-.tabbar-tab:hover { color: var(--text-primary); }
-.tabbar-tab.active { color: var(--text-primary); border-bottom-color: var(--accent); }
-.tabbar-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 6px; }
-
-/* Each tab's content is its own stacking context, so the map's internal
-   layers (Leaflet uses z-index up to 1000) can't paint over the tab bar. */
-.tab-panel { isolation: isolate; }
-
-@media (max-width: 480px) {
-  .tabbar-tab { padding: 12px 14px 10px; font-size: 0.9rem; }
-}
-
-/* Empty state for a tab whose panels can all render nothing (Staff). Hidden
-   whenever a sibling before it rendered something. */
-.tab-empty { text-align: center; color: var(--text-secondary); font-size: 0.9rem; padding: 28px 16px; }
-.tab-panel > :not(.tab-empty) ~ .tab-empty { display: none; }
