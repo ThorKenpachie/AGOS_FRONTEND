@@ -1,382 +1,289 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { Form, Button, Spinner, InputGroup } from 'react-bootstrap';
-
-import { FaEyeSlash, FaEye, FaUser, FaPhone, FaAt, FaLock, FaUserShield, FaHome, FaCheckCircle } from 'react-icons/fa';
-
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabaseClient';
-import { SectionLabel } from '../components/ui';
+import { logger } from '../lib/logger';
+import { detectPhoneNetwork, NETWORK_INFO } from '../lib/phoneNetwork';
 import { RESIDENT_ROLE_ID } from '../lib/roles';
+import { checkPassword, isValidUsername, isValidPhone, generatePassword } from '../lib/credentials';
 
-// Simple heuristic strength meter -- purely a UX nudge, does not change or
-// loosen the actual validation rule (still 8+ chars, enforced in handleSubmit).
-function getPasswordStrength(pw) {
-  if (!pw) return { label: '', pct: 0, color: 'var(--blue-border)' };
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (/[A-Za-z]/.test(pw) && /[0-9]/.test(pw)) score++;
-  if (pw.length >= 12) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  if (score <= 1) return { label: 'Weak', pct: 30, color: '#ef4444' };
-  if (score === 2) return { label: 'Fair', pct: 58, color: '#eab308' };
-  if (score === 3) return { label: 'Good', pct: 80, color: '#38bdf8' };
-  return { label: 'Strong', pct: 100, color: '#22c55e' };
+// One page, two modes (same layout, same controls):
+//   /register      admin creates a staff login
+//   /add-resident  staff registers a resident for SMS alerts (no login)
+
+const EMPTY_STAFF = { name: '', phone: '', username: '', password: '', confirm: '', role_id: '' };
+
+function Field({ id, label, hint, error, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label htmlFor={id} className="registry-field-label">{label}</label>
+      {children}
+      {error
+        ? <div id={`${id}-msg`} className="registry-error" style={{ marginBottom: 0 }}>{error}</div>
+        : hint && <div id={`${id}-msg`} className="registry-hint" style={{ marginBottom: 0 }}>{hint}</div>}
+    </div>
+  );
 }
 
-export default function RegisterPage() {
-  const { createUser, error, clearError, user } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
+function Success({ title, detail, again, back }) {
+  return (
+    <div role="status" style={{ textAlign: 'center', padding: '12px 0' }}>
+      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.1rem', marginBottom: 6 }}>{title}</div>
+      {detail && <div className="settings-desc" style={{ marginBottom: 16 }}>{detail}</div>}
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button type="button" className="btn btn-primary" onClick={again.onClick}>{again.label}</button>
+        <Link to={back.to} className="btn btn-ghost" style={{ textDecoration: 'none' }}>{back.label}</Link>
+      </div>
+    </div>
+  );
+}
 
-  const isResidentMode = location.pathname === '/add-resident';
-  const isAdmin = user.roles?.role_desc === 'Admin';
+// ── Staff account ────────────────────────────────────────────────────────
 
-  const [localError, setLocalError] = useState('');
+function StaffForm() {
+  const { createUser, error, clearError } = useAuth();
+  const [form, setForm] = useState(EMPTY_STAFF);
+  const [touched, setTouched] = useState({});
   const [roles, setRoles] = useState([]);
-  const [form, setForm] = useState({
-    name: '',
-    username: '',
-    password: '',
-    confirmPassword: '',
-    phone: '',
-    role_id: '',
-  });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    supabase.from('roles').select('*').then(({ data }) => {
-      if (data) {
-        setRoles(data);
-        const resident = data.find(r => r.role_id === RESIDENT_ROLE_ID);
-        if (resident) {
-          if (isResidentMode) {
-            setForm(f => ({ ...f, role_id: RESIDENT_ROLE_ID }));
-          }
-        }
-      }
-    });
-  }, [isResidentMode]);
+  const [showPw, setShowPw] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState(null);
 
   useEffect(() => {
     clearError();
-    setLocalError('');
+    supabase.from('roles').select('role_id, role_desc').order('role_id').then(({ data, error: err }) => {
+      if (err) logger.error('Roles load failed:', err.message);
+      else setRoles((data ?? []).filter((r) => r.role_id !== RESIDENT_ROLE_ID));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleChange = (e) => {
+  const set = (name) => (e) => {
     clearError();
-    setLocalError('');
-    setForm({ ...form, [e.target.name]: e.target.value });
+    let value = e.target.value;
+    if (name === 'phone') value = value.replace(/\D/g, '').slice(0, 11);
+    if (name === 'username') value = value.toLowerCase().replace(/\s/g, '');
+    setForm((f) => ({ ...f, [name]: value }));
   };
+  const blur = (name) => () => setTouched((t) => ({ ...t, [name]: true }));
 
-  const handleSubmit = async (e) => {
+  const pw = useMemo(() => checkPassword(form.password), [form.password]);
+  const errors = {
+    name:     form.name.trim() ? '' : 'Enter a name.',
+    phone:    isValidPhone(form.phone) ? '' : 'Use 11 digits starting with 09.',
+    username: isValidUsername(form.username) ? '' : '3–30 characters: letters, numbers, . _ -',
+    password: pw.ok ? '' : 'Use 8+ characters with letters and numbers.',
+    confirm:  form.confirm === form.password ? '' : 'Passwords do not match.',
+    role_id:  form.role_id ? '' : 'Choose a role.',
+  };
+  const valid = Object.values(errors).every((m) => !m);
+  const show = (name) => (touched[name] ? errors[name] : '');
+
+  const submit = async (e) => {
     e.preventDefault();
-
-    if (form.password !== form.confirmPassword) {
-      clearError();
-      setLocalError('Passwords do not match');
-      return;
-    }
-
-    if (form.password.length < 8) {
-      setLocalError('Password must be at least 8 characters');
-      return;
-    }
-
-    setLoading(true);
-
-    const { confirmPassword, ...payload } = form;
-
-    const ok = await createUser(payload);
-
-    setLoading(false);
-
+    setTouched({ name: true, phone: true, username: true, password: true, confirm: true, role_id: true });
+    if (!valid || busy) return;
+    setBusy(true);
+    const ok = await createUser({
+      name: form.name.trim(),
+      phone: form.phone,
+      username: form.username,
+      password: form.password,
+      role_id: Number(form.role_id),
+    });
+    setBusy(false);
     if (ok) {
-      setSuccess(true);
-
-      setForm({
-        name: '',
-        username: '',
-        password: '',
-        confirmPassword: '',
-        phone: '',
-        role_id: isResidentMode ? 7 : '',
-      });
+      setCreated({ name: form.name.trim(), username: form.username });
+      setForm(EMPTY_STAFF);
+      setTouched({});
+      setShowPw(false);
     }
   };
 
-  const inputStyle = {
-    padding: '12px 14px',
-    background: 'var(--blue-mid)', border: '1px solid var(--blue-border)',
-    borderRadius: 'var(--radius-sm)', color: 'var(--text-primary)',
-    fontFamily: 'var(--font-body)', fontSize: '0.95rem',
-    outline: 'none', transition: 'border-color 0.2s',
-  };
-
-  const labelStyle = {
-    display: 'flex', alignItems: 'center', gap: 6,
-    fontSize: '0.8rem', fontWeight: 600,
-    color: 'var(--text-secondary)', marginBottom: '6px',
-    letterSpacing: '0.05em',
-  };
-
-  const phoneValid = /^09\d{9}$/.test(form.phone);
-  const strength = getPasswordStrength(form.password);
-  const passwordsMatch = form.confirmPassword.length > 0 && form.password === form.confirmPassword;
+  if (created) {
+    return (
+      <Success
+        title="Account created"
+        detail={`${created.name} can sign in with the username “${created.username}”.`}
+        again={{ label: 'Add another', onClick: () => setCreated(null) }}
+        back={{ label: 'Staff accounts', to: '/staff' }}
+      />
+    );
+  }
 
   return (
-    <div style={{
-      minHeight: '100vh', background: 'var(--blue-deep)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '24px', position: 'relative', overflow: 'hidden',
-    }}>
+    <form onSubmit={submit} noValidate>
+      <Field id="staff-name" label="Full name" error={show('name')}>
+        <input id="staff-name" className="settings-input registry-field" value={form.name}
+          onChange={set('name')} onBlur={blur('name')} autoComplete="off"
+          aria-invalid={!!show('name')} aria-describedby="staff-name-msg" placeholder="Maria Santos" />
+      </Field>
 
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'radial-gradient(ellipse at 30% 50%, rgba(14,165,233,0.07) 0%, transparent 60%), radial-gradient(ellipse at 70% 20%, rgba(56,189,248,0.05) 0%, transparent 50%)',
-        pointerEvents: 'none',
-      }} />
+      <Field id="staff-phone" label="Mobile number" hint="09XXXXXXXXX" error={show('phone')}>
+        <input id="staff-phone" className="settings-input registry-field" type="tel" inputMode="numeric"
+          value={form.phone} onChange={set('phone')} onBlur={blur('phone')} autoComplete="off"
+          aria-invalid={!!show('phone')} aria-describedby="staff-phone-msg" placeholder="09123456789" />
+      </Field>
 
-      <div className="fade-in" style={{ width: '100%', maxWidth: '440px' }}>
+      <Field id="staff-role" label="Role" error={show('role_id')}>
+        <select id="staff-role" className="settings-input registry-field" value={form.role_id}
+          onChange={set('role_id')} onBlur={blur('role_id')}
+          aria-invalid={!!show('role_id')} aria-describedby="staff-role-msg">
+          <option value="">Select a role</option>
+          {roles.map((r) => <option key={r.role_id} value={r.role_id}>{r.role_desc}</option>)}
+        </select>
+      </Field>
 
-        {/* ── Header with mode icon ─────────────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '24px' }}>
-          <div style={{
-            width: 42, height: 42, borderRadius: 10, flexShrink: 0,
-            background: isResidentMode ? 'rgba(56,189,248,0.12)' : 'rgba(14,165,233,0.12)',
-            border: `1px solid ${isResidentMode ? 'rgba(56,189,248,0.3)' : 'rgba(14,165,233,0.3)'}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '1.1rem', color: 'var(--accent)',
-          }}>
-            {isResidentMode ? <FaHome /> : <FaUserShield />}
-          </div>
-          <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-              {isResidentMode ? 'Add Resident' : 'Create Account'}
-            </h1>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
-              {isResidentMode ? 'Register a resident for Barangay Triangulo': ''}
-            </p>
-          </div>
+      <Field id="staff-username" label="Username" hint="Used to sign in." error={show('username')}>
+        <input id="staff-username" className="settings-input registry-field" value={form.username}
+          onChange={set('username')} onBlur={blur('username')} autoComplete="off" autoCapitalize="none"
+          spellCheck={false} aria-invalid={!!show('username')} aria-describedby="staff-username-msg"
+          placeholder="maria.santos" />
+      </Field>
+
+      <Field id="staff-password" label="Password"
+        hint={form.password ? `${pw.label} · 8+ characters, letters and numbers` : '8+ characters, letters and numbers'}
+        error={show('password')}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input id="staff-password" className="settings-input registry-field" style={{ marginBottom: 0 }}
+            type={showPw ? 'text' : 'password'} value={form.password} onChange={set('password')}
+            onBlur={blur('password')} autoComplete="new-password"
+            aria-invalid={!!show('password')} aria-describedby="staff-password-msg" />
+          <button type="button" className="btn btn-ghost" onClick={() => setShowPw((v) => !v)}
+            aria-pressed={showPw}>{showPw ? 'Hide' : 'Show'}</button>
+          <button type="button" className="btn btn-ghost" onClick={() => {
+            const p = generatePassword();
+            setForm((f) => ({ ...f, password: p, confirm: p }));
+            setShowPw(true);
+          }}>Generate</button>
         </div>
+      </Field>
 
-        <div className="card" style={{ padding: '32px' }}>
+      <Field id="staff-confirm" label="Confirm password" error={show('confirm')}>
+        <input id="staff-confirm" className="settings-input registry-field"
+          type={showPw ? 'text' : 'password'} value={form.confirm} onChange={set('confirm')}
+          onBlur={blur('confirm')} autoComplete="new-password"
+          aria-invalid={!!show('confirm')} aria-describedby="staff-confirm-msg" />
+      </Field>
 
-          {success ? (
-            <div style={{ textAlign: 'center', padding: '16px 0' }}>
-              <div style={{
-                width: 56, height: 56, borderRadius: '50%', margin: '0 auto 16px',
-                background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.6rem', color: '#22c55e',
-              }}>
-                <FaCheckCircle />
-              </div>
-              <p style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '1rem' }}>
-                {isResidentMode ? 'Resident registered!' : 'Account created!'}
-              </p>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '8px' }}>
-                {isResidentMode ? (
-                  <>
-                    <Link to="/add-resident" onClick={() => setSuccess(false)} style={{ color: 'var(--accent)' }}>Register another</Link>
-                    {' '}or{' '}
-                    <Link to="/dashboard" style={{ color: 'var(--accent)' }}>Go to Dashboard</Link>.
-                  </>
-                ) : (
-                  <>You can now <Link to="/login" style={{ color: 'var(--accent)' }}>sign in</Link>.</>
-                )}
-              </p>
-            </div>
-          ) : (
-            <Form onSubmit={handleSubmit}>
+      <div role="alert" className="registry-error">{error}</div>
 
-              {/* ── Personal Information ─────────────────────────────── */}
-              <SectionLabel>👤 Personal Information</SectionLabel>
-
-              <div style={{ marginBottom: '16px' }}>
-                <Form.Label style={labelStyle}><FaUser size={11} /> Full Name</Form.Label>
-                <Form.Control
-                  name="name" type="text" value={form.name}
-                  onChange={handleChange} placeholder="e.g. Maria Santos"
-                  required style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--blue-border)'}
-                />
-              </div>
-
-              <div style={{ marginBottom: '20px' }}>
-                <Form.Label style={labelStyle}><FaPhone size={11} /> Phone Number</Form.Label>
-                <InputGroup>
-                  <Form.Control
-                    name="phone" type="tel" value={form.phone}
-                    onChange={handleChange} placeholder="e.g. 09123456789"
-                    required pattern="^09\d{9}$" maxLength={11}
-                    style={{
-                      ...inputStyle,
-                      borderColor: form.phone.length > 0
-                        ? (phoneValid ? '#22c55e60' : 'var(--blue-border)')
-                        : 'var(--blue-border)',
-                    }}
-                    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                    onBlur={e => e.target.style.borderColor = form.phone.length > 0 && phoneValid ? '#22c55e60' : 'var(--blue-border)'}
-                  />
-                </InputGroup>
-                <Form.Text style={{
-                  color: form.phone.length > 0 && !phoneValid ? '#f0ad4e' : 'var(--text-muted)',
-                  fontSize: '0.72rem', display: 'block', marginTop: '5px',
-                }}>
-                  {form.phone.length > 0 && !phoneValid
-                    ? 'Format: 09 followed by 9 digits (11 digits total)'
-                    : '11-digit PH mobile number, starts with 09'}
-                </Form.Text>
-              </div>
-
-              {/* ── Account Security ─────────────────────────────────── */}
-              <SectionLabel>🔒 Account Authentication</SectionLabel>
-
-              <div style={{ marginBottom: '16px' }}>
-                <Form.Label style={labelStyle}><FaAt size={11} /> Username</Form.Label>
-                <Form.Control
-                  name="username" type="text" value={form.username}
-                  onChange={handleChange} placeholder="e.g. maria_santos"
-                  required style={inputStyle}
-                  onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                  onBlur={e => e.target.style.borderColor = 'var(--blue-border)'}
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <Form.Label style={labelStyle}><FaLock size={11} /> Password</Form.Label>
-                <InputGroup>
-                  <Form.Control
-                    name="password" type={showPassword ? "text" : "password"} value={form.password}
-                    onChange={handleChange} placeholder="••••••••"
-                    required
-                    style={{ ...inputStyle, borderRight: 'none', borderRadius: 'var(--radius-sm) 0 0 var(--radius-sm)' }}
-                    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                    onBlur={e => e.target.style.borderColor = 'var(--blue-border)'}
-                  />
-                  <InputGroup.Text style={{
-                    background: 'var(--blue-mid)', border: '1px solid var(--blue-border)',
-                    borderRadius: '0 var(--radius-sm) var(--radius-sm) 0',
-                    color: 'var(--text-secondary)', cursor: 'pointer', borderLeft: 'none',
-                  }}>
-                    {showPassword
-                      ? <FaEye onClick={() => setShowPassword(p => !p)} />
-                      : <FaEyeSlash onClick={() => setShowPassword(p => !p)} />}
-                  </InputGroup.Text>
-                </InputGroup>
-
-                {form.password.length > 0 && (
-                  <div style={{ marginTop: '8px' }}>
-                    <div style={{ height: 4, background: 'var(--blue-border)', borderRadius: 2, overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%', width: `${strength.pct}%`, background: strength.color,
-                        borderRadius: 2, transition: 'width 0.25s ease, background 0.25s ease',
-                      }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                      <span style={{ fontSize: '0.68rem', color: strength.color, fontWeight: 600 }}>
-                        {strength.label}
-                      </span>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
-                        Min. 8 characters, letters + numbers
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ marginBottom: '24px' }}>
-                <Form.Label style={labelStyle}><FaLock size={11} /> Confirm Password</Form.Label>
-                <InputGroup>
-                  <Form.Control
-                    name="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={form.confirmPassword}
-                    onChange={handleChange} placeholder="••••••••"
-                    required
-                    style={{
-                      ...inputStyle, borderRight: 'none', borderRadius: 'var(--radius-sm) 0 0 var(--radius-sm)',
-                      borderColor: form.confirmPassword.length > 0
-                        ? (passwordsMatch ? '#22c55e60' : '#ef444460')
-                        : 'var(--blue-border)',
-                    }}
-                    onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                    onBlur={e => e.target.style.borderColor = form.confirmPassword.length > 0
-                      ? (passwordsMatch ? '#22c55e60' : '#ef444460') : 'var(--blue-border)'}
-                  />
-                  <InputGroup.Text
-                    onClick={() => setShowConfirmPassword(p => !p)}
-                    style={{
-                      background: 'var(--blue-mid)', border: '1px solid var(--blue-border)',
-                      borderRadius: '0 var(--radius-sm) var(--radius-sm) 0',
-                      color: 'var(--text-secondary)', cursor: 'pointer', borderLeft: 'none',
-                    }}
-                  >
-                    {showConfirmPassword ? <FaEye /> : <FaEyeSlash />}
-                  </InputGroup.Text>
-                </InputGroup>
-                {form.confirmPassword.length > 0 && (
-                  <div style={{
-                    fontSize: '0.72rem', marginTop: '5px',
-                    color: passwordsMatch ? '#22c55e' : '#f87171',
-                    display: 'flex', alignItems: 'center', gap: 5,
-                  }}>
-                    {passwordsMatch ? <><FaCheckCircle size={10} /> Passwords match</> : 'Passwords do not match'}
-                  </div>
-                )}
-              </div>
-
-              {/* Role — admin-only route only */}
-              {!isResidentMode && (
-                <>
-                  <SectionLabel>🛡️ Role &amp; Access</SectionLabel>
-                  <div style={{ marginBottom: '24px' }}>
-                    <Form.Label style={labelStyle}><FaUserShield size={11} /> Role</Form.Label>
-                    <Form.Select
-                      name="role_id" value={form.role_id}
-                      onChange={handleChange} required
-                      style={{ ...inputStyle, cursor: 'pointer' }}
-                      onFocus={e => e.target.style.borderColor = 'var(--accent)'}
-                      onBlur={e => e.target.style.borderColor = 'var(--blue-border)'}
-                    >
-                      <option value="">Select a role...</option>
-                      {roles.map(r => (
-                        <option key={r.role_id} value={r.role_id}>{r.role_desc}</option>
-                      ))}
-                    </Form.Select>
-                  </div>
-                </>
-              )}
-
-              {(error || localError) && (
-                <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', borderRadius: 'var(--radius-sm)', padding: '10px 14px', marginBottom: '16px', color: '#fca5a5', fontSize: '0.85rem' }}>
-                  ⚠️ {error || localError}
-                </div>
-              )}
-
-              <Button type="submit" className="btn btn-primary"
-                style={{ width: '100%', justifyContent: 'center', padding: '13px', fontSize: '1rem', marginTop: isResidentMode ? '8px' : 0 }}
-                disabled={loading}>
-                {loading
-                  ? <><Spinner as="span" animation="grow" size="sm" role="status" aria-hidden="true" /> Loading ...</>
-                  : isResidentMode ? '🏘️ Register Resident' : '✅ Register'}
-              </Button>
-
-              {!isResidentMode && (
-                <p style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Already have an account? <Link to="/login" style={{ color: 'var(--accent)' }}>Sign in</Link>
-                </p>
-              )}
-
-            </Form>
-          )}
-        </div>
+      <div className="registry-dialog-actions" style={{ marginTop: 8 }}>
+        <Link to="/staff" className="btn btn-ghost" style={{ textDecoration: 'none' }}>Cancel</Link>
+        <button type="submit" className="btn btn-primary" disabled={busy}>
+          {busy ? 'Creating…' : 'Create account'}
+        </button>
       </div>
+    </form>
+  );
+}
+
+// ── Resident (SMS alerts only, no login) ─────────────────────────────────
+
+function ResidentForm() {
+  const { user } = useAuth();
+  const [form, setForm] = useState({ name: '', phone: '' });
+  const [consent, setConsent] = useState(false);
+  const [smsAck, setSmsAck] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState(false);
+
+  const phoneOk = isValidPhone(form.phone);
+  const network = phoneOk ? detectPhoneNetwork(form.phone) : null;
+  const needsAck = !!network && !network.deliverable;
+  const canSubmit = !busy && form.name.trim() && phoneOk && consent && (!needsAck || smsAck);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setBusy(true);
+    setError('');
+    const { error: insertError } = await supabase.from('residents').insert({
+      name: form.name.trim(),
+      phone: form.phone,
+      network: network?.network ?? 'unknown',
+      sms_deliverable: network?.deliverable ?? false,
+      added_by: user?.id ?? null,
+      consent_given: true,
+    });
+    setBusy(false);
+    if (insertError) {
+      logger.error('Resident insert failed:', insertError.message);
+      // phone has a unique constraint -- the usual cause of a failed insert
+      setError(insertError.code === '23505' ? 'This number is already registered.' : 'Could not save. Try again.');
+      return;
+    }
+    setDone(true);
+    setForm({ name: '', phone: '' });
+    setConsent(false);
+    setSmsAck(false);
+  };
+
+  if (done) {
+    return (
+      <Success
+        title="Resident added"
+        again={{ label: 'Add another', onClick: () => setDone(false) }}
+        back={{ label: 'Residents', to: '/residents' }}
+      />
+    );
+  }
+
+  const info = network ? NETWORK_INFO[network.network] : null;
+
+  return (
+    <form onSubmit={submit} noValidate>
+      <Field id="res-name" label="Full name">
+        <input id="res-name" className="settings-input registry-field" value={form.name}
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          autoComplete="off" placeholder="Maria Santos" />
+      </Field>
+
+      <Field id="res-phone" label="Mobile number"
+        hint={info ? `${info.label}${network.deliverable ? '' : ' · SMS may not reach this number'}` : '09XXXXXXXXX'}
+        error={form.phone && !phoneOk ? 'Use 11 digits starting with 09.' : ''}>
+        <input id="res-phone" className="settings-input registry-field" type="tel" inputMode="numeric"
+          value={form.phone}
+          onChange={(e) => { setSmsAck(false); setForm((f) => ({ ...f, phone: e.target.value.replace(/\D/g, '').slice(0, 11) })); }}
+          autoComplete="off" aria-describedby="res-phone-msg" placeholder="09123456789" />
+      </Field>
+
+      <label className="registry-check">
+        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+        <span>Resident is present, identified, and signed the consent form for AGOS SMS alerts.</span>
+      </label>
+
+      {needsAck && (
+        <label className="registry-check">
+          <input type="checkbox" checked={smsAck} onChange={(e) => setSmsAck(e.target.checked)} />
+          <span>I will tell this resident to install the AGOS app for push alerts.</span>
+        </label>
+      )}
+
+      <div role="alert" className="registry-error">{error}</div>
+
+      <div className="registry-dialog-actions" style={{ marginTop: 8 }}>
+        <Link to="/residents" className="btn btn-ghost" style={{ textDecoration: 'none' }}>Cancel</Link>
+        <button type="submit" className="btn btn-primary" disabled={!canSubmit}>
+          {busy ? 'Saving…' : 'Add resident'}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export default function RegistrationPage() {
+  const { pathname } = useLocation();
+  const residentMode = pathname === '/add-resident';
+  return (
+    <div className="fade-in" style={{ maxWidth: 520, margin: '0 auto' }}>
+      <section className="card" aria-labelledby="reg-title">
+        <h2 id="reg-title" className="registry-dialog-title">
+          {residentMode ? 'Add resident' : 'New staff account'}
+        </h2>
+        {residentMode ? <ResidentForm /> : <StaffForm />}
+      </section>
     </div>
   );
 }

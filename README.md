@@ -1,62 +1,110 @@
-# 🌊 AGOS — Flood Early Warning System
-### Capstone Prototype | Barangay Triangulo, Naga City
+# AGOS — Flood Early Warning System (Web)
 
----
+Web dashboard for **Barangay Triangulo, Naga City**. Anyone can view live flood
+status, rainfall, forecasts and the evacuation map. Signed-in staff dispatch
+alerts, manage residents and keep the daily flood log.
 
-## Quick Start
+**Stack:** React 19 · Vite · Supabase (Postgres, Auth, Edge Functions) · MapLibre / Leaflet · Recharts · Vercel
+
+## Quick start
+
+Requires Node 20+.
 
 ```bash
-# 1. Install dependencies
 npm install
-
-# 2. Run development server
+cp .env.example .env.local   # fill in the DEV project values
 npm run dev
-
-# 3. Open in browser
-# http://localhost:5173
 ```
 
-## Demo Login Accounts
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build to `dist/` |
+| `npm run preview` | Serve the production build locally |
 
-| Username | Password | Role |
-|---|---|---|
-| `barangay_captain` | `agos2024` | Barangay Official |
-| `bgy_secretary` | `agos2024` | Barangay Secretary |
-| `drrm_officer` | `agos2024` | DRRM Team |
+### Environment variables
 
----
+| Variable | Description |
+| --- | --- |
+| `VITE_SUPABASE_URL` | Supabase project URL |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable (anon) key |
+| `VITE_LIVE_URL` / `VITE_MOCK_URL` | Flood model API base addresses (no path, no trailing slash) |
 
-## Features
+> Use the **dev** Supabase project locally. A project with SMS / Firebase keys
+> sends alerts to real residents, so keep those keys out of dev.
 
-- ✅ **Dashboard** — Alert level, live water gauge (auto-updates every 5s), weather forecast, one-click evacuation button
-- ✅ **Real-Time Water Level** — Chart + table view, visual gauge, color-coded thresholds
-- ✅ **Rainfall Accumulation** — Hourly/daily charts and tables from PAGASA
-- ✅ **Flood Zone Map** — SVG map of Barangay Triangulo with Zone 1–4 risk levels
-- ✅ **Historical Flood Events** — Timeline of past typhoons affecting the barangay
-- ✅ **Alert Notification Log** — Send/view/filter alerts; exportable log (SOP #6)
-- ✅ **Data Sources Panel** — Live status of PAGASA, DOST-ASTI, OCD Region V, LGU
+## Project structure
 
-## Research Question Mapping
+```
+├── public/                 Static assets (icons, web manifest)
+├── src/
+│   ├── App.jsx             Providers and routes (pages are lazy-loaded)
+│   ├── main.jsx            Entry point
+│   ├── index.css           Design tokens and global styles
+│   ├── components/         Layout, maps, banners, alert widgets
+│   │   └── ui/             Small shared primitives (Badge, TabBar, ErrorBanner, ...)
+│   ├── pages/              One file per route
+│   ├── hooks/              Context providers: auth, theme, language, data source, ...
+│   ├── lib/                Supabase client, model API, routing, hazard and risk logic, i18n
+│   ├── data/               Triangulo GeoJSON, critical facilities, mock data
+│   └── assets/             Bundled images
+├── supabase/
+│   ├── migrations/         Database schema, applied in filename order
+│   ├── functions/          Edge functions (+ _shared helpers)
+│   └── config.toml
+├── docs/                   PAGASA.md (wind-signal integration), BENCHMARK.md (design references)
+└── vercel.json             SPA rewrites, security and cache headers
+```
 
-| RQ | Component |
-|---|---|
-| RQ1 & RQ2 — Current limitations | Historical Events, Data Sources Panel |
-| RQ3 — Functional requirements | Water Level Gauge, Rainfall Chart, Alert Levels |
-| RQ5 — Non-technical visualization | Flood Zone Map, Plain-language status, Evacuation button |
-| RQ6 — Usability | Mobile-responsive layout, Notification Log |
+### Edge functions
 
-## Tech Stack
+| Function | Role |
+| --- | --- |
+| `poll-flood` | Polls the flood model on a schedule and dispatches alerts |
+| `check-forecast` | Sends an OUTLOOK alert when the 3-day forecast turns from normal to elevated |
+| `send-alert` | Sends SMS to registered residents |
+| `send-push-notification` | Sends push notifications |
+| `on-alert-change` | Database webhook that logs per-channel delivery results |
+| `on-incident-verified` | Database webhook that notifies when a community report is verified |
+| `pagasa-bulletin` | Reads PAGASA Tropical Cyclone Bulletins ([details](docs/PAGASA.md)) |
+| `create-user`, `manage-user` | Admin-only staff account management |
 
-- **React 18** + **Vite** — Frontend framework
-- **Recharts** — Charts (water level, rainfall)
-- **SweetAlert2** — Evacuation/alert modals
-- **DM Sans + Syne** — Typography
-- **Simulated Data** — PAGASA/DOST-ASTI data emulated for prototype
+## Environments
 
-## Notes
+| | Dev | Prod |
+| --- | --- | --- |
+| Supabase | Separate project | Live project |
+| SMS / push keys (`PHILSMS_*`, `FIREBASE_*`) | Not set | Set |
+| Cron `poll-flood` | Off | Every 5 min |
 
-> This is a **capstone prototype** using simulated data. PAGASA covers regional stations; a deployed local IoT sensor node would be required for hyper-local real-time accuracy (per Assumption 1 of the study).
+## Releasing a change
 
----
+Always release to dev first, then prod:
 
-*AGOS v1.0 — Capstone Prototype · Bicol Region, Philippines*
+1. **Database:** apply new files from `supabase/migrations/` (SQL editor or `npx supabase db push`).
+2. **Functions:** `npx supabase functions deploy --project-ref <ref> --use-api`
+3. **Web app:** push to the branch Vercel deploys.
+
+Edge function secrets (Dashboard → Edge Functions → Secrets):
+`INTERNAL_FUNCTION_SECRET`, `MODEL_BASE_URL`, and in prod only `PHILSMS_*` and
+`FIREBASE_*`.
+
+## Accounts and roles
+
+- Staff sign in with a username (stored as `<username>@agos.local`).
+- Only admins create staff (**Staff → Add staff**), change roles, reset
+  passwords and disable accounts. A disabled account loses access at once, and
+  the last active admin cannot be demoted or disabled.
+- Residents have no web login. Staff add them to the SMS list from
+  **Add Resident**; residents use the mobile app.
+- **First admin on a new project:** create the Auth user in the Supabase
+  dashboard, then insert a `profiles` row with the admin role and the same id.
+
+## Troubleshooting
+
+- **Signs in, then "This account has no profile"** — the Auth user has no
+  `profiles` row. Insert one with the same id.
+- **Blank page after deploy** — check both `VITE_SUPABASE_*` variables are set
+  in Vercel; the app shows a "not set up" message when they are missing.
+- **Staff page says disabling needs the latest database update** — run the
+  newest migration.

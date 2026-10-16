@@ -1,0 +1,31 @@
+import { createContext, useContext, useEffect, useState } from 'react';
+import { LANGUAGES, t as translate } from '../lib/i18n';
+
+const LanguageContext = createContext();
+
+export function LanguageProvider({ children }) {
+  const [lang, setLang] = useState(
+    () => localStorage.getItem('agos-lang') || 'en'
+  );
+
+  // Screen readers choose pronunciation from <html lang>, so keep it in
+  // step with the language picked in the UI.
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
+
+  const changeLang = (code) => {
+    setLang(code);
+    localStorage.setItem('agos-lang', code);
+  };
+
+  const t = (path) => translate(lang, path);
+
+  return (
+    <LanguageContext.Provider value={{ lang, setLang: changeLang, languages: LANGUAGES, t }}>
+      {children}
+    </LanguageContext.Provider>
+  );
+}
+
+export const useLanguage = () => useContext(LanguageContext);
